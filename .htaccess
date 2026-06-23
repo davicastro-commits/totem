@@ -1,0 +1,121 @@
+# ── Indexes & basic security ──────────────────────────────────────────
+Options -Indexes -MultiViews
+
+# ── Block sensitive files ─────────────────────────────────────────────
+<FilesMatch "^(\.env|\.env\.example|composer\.(json|lock)|package(-lock)?\.json|\.gitignore|CHANGELOG\.md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(reset_admin\.php|teste_db\.php)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block logs directory entirely
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^logs/ - [F,L]
+</IfModule>
+
+# ── Security headers ──────────────────────────────────────────────────
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options     "nosniff"
+    Header always set X-Frame-Options            "SAMEORIGIN"
+    Header always set X-XSS-Protection           "1; mode=block"
+    Header always set Referrer-Policy            "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy         "geolocation=(), microphone=(), camera=()"
+
+    # Remove server info
+    Header always unset X-Powered-By
+    Header always unset Server
+</IfModule>
+
+# ── Gzip compression ──────────────────────────────────────────────────
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE text/javascript
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE font/woff2
+
+    # Don't compress already compressed formats
+    SetEnvIfNoCase Request_URI \.(?:gif|jpe?g|png|webp|ico|woff2?)$ no-gzip dont-vary
+    SetEnvIfNoCase Request_URI sse\.php$ no-gzip dont-vary
+
+    Header append Vary Accept-Encoding
+</IfModule>
+
+# ── Browser caching ───────────────────────────────────────────────────
+<IfModule mod_expires.c>
+    ExpiresActive On
+
+    # Static assets — 7 days
+    ExpiresByType text/css                  "access plus 7 days"
+    ExpiresByType application/javascript    "access plus 7 days"
+    ExpiresByType image/png                 "access plus 30 days"
+    ExpiresByType image/jpeg                "access plus 30 days"
+    ExpiresByType image/webp                "access plus 30 days"
+    ExpiresByType image/svg+xml             "access plus 30 days"
+    ExpiresByType image/x-icon              "access plus 30 days"
+    ExpiresByType font/woff2                "access plus 1 year"
+    ExpiresByType font/woff                 "access plus 1 year"
+
+    # Manifests & service workers — no cache (so updates apply immediately)
+    ExpiresByType application/manifest+json "access plus 0 seconds"
+    ExpiresByType text/cache-manifest       "access plus 0 seconds"
+
+    # HTML & API — no cache
+    ExpiresByType text/html                 "access plus 0 seconds"
+    ExpiresByType application/json          "access plus 0 seconds"
+</IfModule>
+
+<IfModule mod_headers.c>
+    # Versioned assets (with ?v= query) get long cache
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=604800, immutable"
+    </FilesMatch>
+
+    # Service worker must not be cached
+    <FilesMatch "sw\.js$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Service-Worker-Allowed "/"
+    </FilesMatch>
+
+    # SSE must not be cached or buffered
+    <FilesMatch "sse\.php$">
+        Header set Cache-Control "no-cache, no-store"
+        Header set X-Accel-Buffering "no"
+    </FilesMatch>
+</IfModule>
+
+# ── PHP settings ──────────────────────────────────────────────────────
+<IfModule mod_php.c>
+    php_flag  expose_php            Off
+    php_flag  display_errors        Off
+    php_flag  log_errors            On
+    php_value error_log             logs/php_errors.log
+    php_value session.cookie_httponly 1
+    php_value session.use_strict_mode 1
+    php_value session.cookie_samesite Lax
+    php_value session.gc_maxlifetime  3600
+    php_value upload_max_filesize   10M
+    php_value post_max_size         12M
+</IfModule>
+
+<IfModule mod_php8.c>
+    php_flag  expose_php            Off
+    php_flag  display_errors        Off
+    php_flag  log_errors            On
+    php_value error_log             logs/php_errors.log
+    php_value session.cookie_httponly 1
+    php_value session.use_strict_mode 1
+    php_value session.cookie_samesite Lax
+    php_value session.gc_maxlifetime  3600
+    php_value upload_max_filesize   10M
+    php_value post_max_size         12M
+</IfModule>

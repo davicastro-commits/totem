@@ -1,0 +1,15 @@
+# Credentials
+.env
+
+# Logs
+logs/*.log
+logs/*.log.*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,5 @@
+Options -Indexes -ExecCGI
+AddHandler cgi-script .php .php3 .php4 .php5 .phtml .pl .py .cgi
+<FilesMatch "\.(php|phtml|pl|py|cgi)$">
+  Deny from all
+</FilesMatch>
