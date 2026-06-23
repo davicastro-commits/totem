@@ -57,9 +57,134 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
 $dataIni = $_GET['data_ini'] ?? date('Y-m-d');
 $dataFim = $_GET['data_fim'] ?? date('Y-m-d');
+$action  = $_GET['action']   ?? '';
 
 try {
     $db = getDB();
+
+    // ── Fechamento de caixa ───────────────────────────────────────────
+    if ($action === 'fechamento') {
+        $data = $_GET['data'] ?? date('Y-m-d');
+
+        $pagStmt = $db->prepare("
+            SELECT forma_pagamento,
+                   COUNT(*)       AS pedidos,
+                   SUM(total)     AS total
+              FROM totem_pedidos
+             WHERE DATE(criado_em) = ?
+               AND status NOT IN ('cancelado','aguardando_pagamento')
+             GROUP BY forma_pagamento
+             ORDER BY total DESC
+        ");
+        $pagStmt->execute([$data]);
+        $porPagamento = $pagStmt->fetchAll();
+
+        $totStmt = $db->prepare("
+            SELECT COUNT(*)   AS pedidos,
+                   COALESCE(SUM(total),0) AS total,
+                   COALESCE(AVG(total),0) AS ticket_medio,
+                   COALESCE(SUM(CASE WHEN tipo_consumo='local'   THEN 1 ELSE 0 END),0) AS local,
+                   COALESCE(SUM(CASE WHEN tipo_consumo='viagem'  THEN 1 ELSE 0 END),0) AS viagem,
+                   (SELECT COUNT(*) FROM totem_pedidos
+                     WHERE DATE(criado_em) = ? AND status = 'cancelado') AS cancelados,
+                   (SELECT COALESCE(SUM(total),0) FROM totem_pedidos
+                     WHERE DATE(criado_em) = ? AND status = 'cancelado') AS total_cancelado
+              FROM totem_pedidos
+             WHERE DATE(criado_em) = ?
+               AND status NOT IN ('cancelado','aguardando_pagamento')
+        ");
+        $totStmt->execute([$data, $data, $data]);
+        $totais = $totStmt->fetch();
+
+        $itensStmt = $db->prepare("
+            SELECT COALESCE(SUM(ip.quantidade),0) AS itens
+              FROM totem_itens_pedido ip
+              JOIN totem_pedidos p ON p.id = ip.pedido_id
+             WHERE DATE(p.criado_em) = ?
+               AND p.status NOT IN ('cancelado','aguardando_pagamento')
+        ");
+        $itensStmt->execute([$data]);
+        $totalItens = (int)$itensStmt->fetchColumn();
+
+        $listaStmt = $db->prepare("
+            SELECT p.numero_pedido, p.criado_em, p.forma_pagamento,
+                   p.tipo_consumo, p.total, p.status, p.origem, p.cpf,
+                   (SELECT string_agg(nome_produto || ' x' || quantidade, ', ' ORDER BY id)
+                      FROM totem_itens_pedido WHERE pedido_id = p.id) AS itens
+              FROM totem_pedidos p
+             WHERE DATE(p.criado_em) = ?
+             ORDER BY p.criado_em ASC
+        ");
+        $listaStmt->execute([$data]);
+        $lista = $listaStmt->fetchAll();
+
+        echo json_encode([
+            'success'        => true,
+            'data'           => date('d/m/Y', strtotime($data)),
+            'por_pagamento'  => $porPagamento,
+            'totais'         => $totais,
+            'total_itens'    => $totalItens,
+            'pedidos'        => $lista,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // ── Tempo médio de preparo por faixa horária ──────────────────────
+    if ($action === 'preparo') {
+        $dataIniP = $_GET['data_ini'] ?? date('Y-m-d');
+        $dataFimP = $_GET['data_fim'] ?? date('Y-m-d');
+
+        $stmt = $db->prepare("
+            SELECT
+                FLOOR(EXTRACT(HOUR FROM iniciado_em) / 2) * 2  AS faixa_inicio,
+                COUNT(*)                                         AS pedidos,
+                ROUND(AVG(
+                    EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) / 60.0
+                )::numeric, 1)                                   AS tempo_medio_min,
+                ROUND(MIN(
+                    EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) / 60.0
+                )::numeric, 1)                                   AS tempo_min,
+                ROUND(MAX(
+                    EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) / 60.0
+                )::numeric, 1)                                   AS tempo_max
+              FROM totem_pedidos
+             WHERE DATE(criado_em) BETWEEN ? AND ?
+               AND iniciado_em IS NOT NULL
+               AND concluido_em IS NOT NULL
+               AND concluido_em > iniciado_em
+               AND EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) < 3600
+             GROUP BY faixa_inicio
+             ORDER BY faixa_inicio
+        ");
+        $stmt->execute([$dataIniP, $dataFimP]);
+        $faixas = $stmt->fetchAll();
+
+        $geralStmt = $db->prepare("
+            SELECT
+                COUNT(*) AS total_com_tempo,
+                ROUND(AVG(EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) / 60.0)::numeric, 1) AS media_geral,
+                ROUND(MIN(EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) / 60.0)::numeric, 1) AS mais_rapido,
+                ROUND(MAX(EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) / 60.0)::numeric, 1) AS mais_lento,
+                (SELECT COUNT(*) FROM totem_pedidos
+                  WHERE DATE(criado_em) BETWEEN ? AND ?
+                    AND status NOT IN ('cancelado','aguardando_pagamento')) AS total_pedidos
+              FROM totem_pedidos
+             WHERE DATE(criado_em) BETWEEN ? AND ?
+               AND iniciado_em IS NOT NULL
+               AND concluido_em IS NOT NULL
+               AND concluido_em > iniciado_em
+               AND EXTRACT(EPOCH FROM (concluido_em - iniciado_em)) < 3600
+        ");
+        $geralStmt->execute([$dataIniP, $dataFimP, $dataIniP, $dataFimP]);
+        $geral = $geralStmt->fetch();
+
+        echo json_encode([
+            'success' => true,
+            'faixas'  => $faixas,
+            'geral'   => $geral,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
     // ── KPIs ──────────────────────────────────────────────────────────
     $kpi = $db->prepare("

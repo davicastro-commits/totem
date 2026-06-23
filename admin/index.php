@@ -256,6 +256,36 @@ input:checked+.toggle-track::after{transform:translateX(18px)}
 .bar-fill{height:100%;border-radius:4px;transition:width .4s ease}
 .bar-val{width:70px;color:var(--text);font-weight:600}
 
+/* Insight strip */
+.insight-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.insight-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden}
+.insight-card::before{content:'';position:absolute;top:-28px;right:-28px;width:70px;height:70px;border-radius:50%;background:var(--ic,var(--acc));opacity:.06;pointer-events:none}
+.insight-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)}
+.insight-val{font-size:24px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums}
+.insight-sub{font-size:12px;color:var(--text4)}
+.insight-ibar{height:5px;background:var(--card2);border-radius:3px;overflow:hidden;margin-top:4px}
+.insight-ibar-fill{height:100%;border-radius:3px}
+.idelta{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-top:5px}
+.idelta-up{background:rgba(34,197,94,.12);color:var(--green)}
+.idelta-dn{background:rgba(239,68,68,.12);color:var(--red)}
+
+/* Heatmap */
+.hm-wrap{overflow-x:auto;padding:12px 16px}
+.hm-table{border-collapse:collapse;font-size:11px;width:100%}
+.hm-table th{padding:2px 4px;color:var(--text3);font-weight:600;text-align:center;white-space:nowrap}
+.hm-table td{padding:2px}
+.hm-cell{width:100%;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:transparent;cursor:default;min-width:24px}
+.hm-cell:hover{color:#fff!important}
+.hm-day{color:var(--text2);font-weight:600;white-space:nowrap;padding-right:8px!important;text-align:right}
+.hm-legend{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:11px;color:var(--text3)}
+.hm-swatch{width:18px;height:10px;border-radius:2px}
+
+/* Previsao estoque */
+.days-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+.days-ok{background:rgba(34,197,94,.12);color:var(--green)}
+.days-warn{background:rgba(245,158,11,.12);color:var(--gold)}
+.days-crit{background:rgba(239,68,68,.12);color:var(--red)}
+
 /* Status flow */
 .status-flow{display:flex;gap:4px;margin-top:12px}
 .flow-step{flex:1;padding:8px 6px;text-align:center;border-radius:8px;font-size:11px;font-weight:700;border:2px solid transparent;cursor:pointer;transition:all .15s}
@@ -341,6 +371,7 @@ input:checked+.toggle-track::after{transform:translateX(18px)}
       <a href="delivery/" class="sb-link" target="_blank">🛵 Delivery</a>
       <a href="../garcom/" class="sb-link" target="_blank">👨‍💼 App Garçom</a>
       <a href="dashboard/" class="sb-link" target="_blank">📊 Dashboard</a>
+      <a href="relatorios/" class="sb-link" target="_blank">📋 Relatórios</a>
       <?php if ($isAdmin): ?>
       <a href="#" class="sb-link" id="btn-backup" onclick="fazBackup(event)">💾 Backup BD</a>
       <?php endif; ?>
@@ -373,6 +404,10 @@ input:checked+.toggle-track::after{transform:translateX(18px)}
       <!-- ─── DASHBOARD ──────────────────────────────────────────────── -->
       <div class="panel active" id="panel-dashboard">
         <div class="kpi-grid" id="dash-kpis"></div>
+
+        <!-- Insight strip: margem, projeção, comparativo -->
+        <div class="insight-strip" id="dash-insights" style="display:none"></div>
+
         <div class="grid-2">
           <div class="section-card">
             <div class="section-head"><h3>Pedidos ativos</h3><span id="dash-ativos-time" style="font-size:11px;color:var(--text3)"></span></div>
@@ -383,6 +418,27 @@ input:checked+.toggle-track::after{transform:translateX(18px)}
             <div class="section-body"><div class="chart-wrap"><canvas id="chart-7d"></canvas></div></div>
           </div>
         </div>
+
+        <!-- Heatmap de vendas -->
+        <div class="section-card" id="dash-heatmap-card" style="display:none;margin-bottom:16px">
+          <div class="section-head">
+            <h3>🌡️ Mapa de calor — pedidos por hora (30 dias)</h3>
+            <span style="font-size:11px;color:var(--text3)">Seg–Dom · 6h–21h</span>
+          </div>
+          <div class="hm-wrap" id="dash-heatmap"></div>
+        </div>
+
+        <!-- Previsão de estoque acabar -->
+        <div class="section-card" id="dash-previsao-card" style="display:none;margin-bottom:16px">
+          <div class="section-head">
+            <h3>🔮 Previsão de estoque — dias restantes</h3>
+            <a href="estoque/" style="font-size:12px;color:var(--acc);text-decoration:none;font-weight:600" target="_blank">Gerenciar →</a>
+          </div>
+          <div style="overflow:hidden">
+            <table class="data-table" id="dash-previsao"></table>
+          </div>
+        </div>
+
         <div class="section-card">
           <div class="section-head"><h3>Últimos pedidos</h3><button class="btn btn-secondary btn-sm" onclick="switchTab('pedidos')">Ver todos →</button></div>
           <div class="data-table-wrap" style="border:none;border-radius:0">
@@ -943,6 +999,9 @@ async function loadDashboard() {
     // 7-day chart — load last 7 days
     load7dChart();
 
+    // Insights (margem, projeção, heatmap, previsão estoque)
+    loadDashboardInsights();
+
     // Recent orders
     const rows = (d.pedidos_lista||[]).slice(0,10);
     document.getElementById('dash-recent-body').innerHTML = rows.map(p =>
@@ -1009,6 +1068,136 @@ async function load7dChart() {
       scales:{x:{grid:{display:false},ticks:{color:'#6b7280',font:{size:11}}},
               y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#6b7280',font:{size:11},callback:v=>'R$'+v.toFixed(0)}}} }
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ── DASHBOARD INSIGHTS ────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+async function loadDashboardInsights() {
+  const res = await api('dashboard.php');
+  if (!res || !res.success) return;
+
+  const {
+    fat_hoje, ped_hoje, fat_ontem, ped_ontem,
+    custo_hoje, fat_mes, dias_passados, dias_mes, fat_mes_ant,
+    heatmap, previsao,
+  } = res;
+
+  // ── Helpers ──
+  const brl = v => 'R$ ' + parseFloat(v||0).toFixed(2).replace('.',',');
+  function deltaHtml(novo, ant) {
+    if (ant <= 0) return '';
+    const d = Math.round(((novo - ant) / ant) * 1000) / 10;
+    const cls = d >= 0 ? 'idelta-up' : 'idelta-dn';
+    return '<span class="idelta '+cls+'">'+(d>=0?'↑':'↓')+' '+Math.abs(d)+'% vs ontem</span>';
+  }
+
+  // ── INSIGHT STRIP ─────────────────────────────────────────────────
+  const margemVal = Math.max(0, fat_hoje - custo_hoje);
+  const margemPct = fat_hoje > 0 ? Math.round((margemVal / fat_hoje) * 1000) / 10 : 0;
+  const diasP     = Math.max(1, dias_passados);
+  const projecao  = (fat_mes / diasP) * dias_mes;
+  const varMes    = fat_mes_ant > 0 ? Math.round(((projecao - fat_mes_ant) / fat_mes_ant) * 1000) / 10 : null;
+  const media     = fat_mes / diasP;
+  const varHoje   = media > 0 ? Math.round(((fat_hoje / media) - 1) * 1000) / 10 : null;
+  const progPct   = dias_mes > 0 ? Math.round((diasP / dias_mes) * 100) : 0;
+
+  const strip = document.getElementById('dash-insights');
+  strip.innerHTML =
+    // Margem bruta
+    '<div class="insight-card" style="--ic:var(--green)">'+
+      '<div class="insight-lbl">📊 Margem bruta estimada — hoje</div>'+
+      '<div class="insight-val" style="color:var(--green)">'+brl(margemVal)+'</div>'+
+      '<div class="insight-sub">Fat. '+brl(fat_hoje)+' − Custo '+brl(custo_hoje)+'</div>'+
+      '<div class="insight-ibar"><div class="insight-ibar-fill" style="width:'+Math.min(100,margemPct)+'%;background:var(--green)"></div></div>'+
+      '<span style="font-size:12px;color:var(--green);font-weight:700">'+margemPct+'% de margem</span>'+
+      (custo_hoje<=0?'<span style="font-size:11px;color:var(--text3)">* Cadastre custo nos insumos</span>':'')+
+    '</div>'+
+    // Projeção do mês
+    '<div class="insight-card" style="--ic:var(--blue)">'+
+      '<div class="insight-lbl">📈 Projeção — mês atual</div>'+
+      '<div class="insight-val" style="color:var(--blue)">'+brl(projecao)+'</div>'+
+      '<div class="insight-sub">Realizado: '+brl(fat_mes)+' ('+diasP+'/'+dias_mes+' dias)</div>'+
+      '<div class="insight-ibar"><div class="insight-ibar-fill" style="width:'+progPct+'%;background:var(--blue)"></div></div>'+
+      (varMes!==null?'<span class="idelta '+(varMes>=0?'idelta-up':'idelta-dn')+'">'+(varMes>=0?'↑':'↓')+' '+Math.abs(varMes)+'% vs mês anterior</span>':'')+
+    '</div>'+
+    // Hoje vs média
+    '<div class="insight-card" style="--ic:var(--gold)">'+
+      '<div class="insight-lbl">📅 Média diária — este mês</div>'+
+      '<div class="insight-val" style="color:var(--gold)">'+brl(media)+'</div>'+
+      '<div class="insight-sub">Base: '+diasP+' dias no mês</div>'+
+      (varHoje!==null?'<span class="idelta '+(varHoje>=0?'idelta-up':'idelta-dn')+'">'+(varHoje>=0?'↑':'↓')+' '+Math.abs(varHoje)+'% — hoje vs média</span>':'')+
+      '<div style="font-size:12px;color:var(--text3);margin-top:6px">Fechamento estimado: <strong style="color:var(--text)">'+brl(projecao)+'</strong></div>'+
+    '</div>';
+  strip.style.display = 'grid';
+
+  // ── HEATMAP ───────────────────────────────────────────────────────
+  const hm = {}; let hmMax = 1;
+  (heatmap||[]).forEach(r => {
+    if (!hm[r.dow]) hm[r.dow] = {};
+    hm[r.dow][r.hora] = parseInt(r.cnt);
+    if (parseInt(r.cnt) > hmMax) hmMax = parseInt(r.cnt);
+  });
+
+  const DIAS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const HORAS   = Array.from({length:16}, (_,i)=>i+6); // 6–21
+  const ORDEM   = [1,2,3,4,5,6,0]; // Seg→Dom
+
+  if (Object.keys(hm).length > 0) {
+    let hmHtml = '<table class="hm-table"><thead><tr><th></th>';
+    HORAS.forEach(h => { hmHtml += '<th>'+h+'h</th>'; });
+    hmHtml += '</tr></thead><tbody>';
+    ORDEM.forEach(dow => {
+      hmHtml += '<tr><td class="hm-day">'+DIAS_PT[dow]+'</td>';
+      HORAS.forEach(h => {
+        const cnt = (hm[dow]||{})[h] || 0;
+        const int = cnt / hmMax;
+        let bg;
+        if (int <= 0) bg = 'rgba(255,255,255,.04)';
+        else if (int < 0.25) bg = 'rgba(59,130,246,'+(0.15+int*0.8).toFixed(2)+')';
+        else if (int < 0.6)  bg = 'rgba(245,158,11,'+(0.3+int*0.7).toFixed(2)+')';
+        else                  bg = 'rgba(255,85,0,'+(0.5+int*0.5).toFixed(2)+')';
+        const title = cnt>0 ? cnt+' pedido'+(cnt!=1?'s':'')+' às '+h+'h ('+DIAS_PT[dow]+')' : '';
+        hmHtml += '<td title="'+title+'"><div class="hm-cell" style="background:'+bg+';color:'+(cnt>0?'rgba(255,255,255,.7)':'transparent')+'">'+
+          (cnt>0?cnt:'')+'</div></td>';
+      });
+      hmHtml += '</tr>';
+    });
+    hmHtml += '</tbody></table>';
+    hmHtml += '<div class="hm-legend"><span>Menos</span><div style="display:flex;gap:3px">';
+    ['rgba(255,255,255,.04)','rgba(59,130,246,.3)','rgba(59,130,246,.6)','rgba(245,158,11,.5)','rgba(245,158,11,.8)','rgba(255,85,0,.7)','rgba(255,85,0,1)']
+      .forEach(c => { hmHtml += '<div class="hm-swatch" style="background:'+c+'"></div>'; });
+    hmHtml += '</div><span>Mais</span></div>';
+    document.getElementById('dash-heatmap').innerHTML = hmHtml;
+    document.getElementById('dash-heatmap-card').style.display = '';
+  }
+
+  // ── PREVISÃO DE ESTOQUE ────────────────────────────────────────────
+  if (previsao && previsao.length > 0) {
+    const tbl = document.getElementById('dash-previsao');
+    tbl.innerHTML =
+      '<thead><tr>'+
+        '<th>Insumo</th>'+
+        '<th style="text-align:right">Estoque</th>'+
+        '<th style="text-align:right">Consumo/dia</th>'+
+        '<th style="text-align:right">Dias restantes</th>'+
+        '<th>Status</th>'+
+      '</tr></thead><tbody>'+
+      previsao.map(p => {
+        const dias2 = p.consumo_dia > 0 ? Math.floor(parseFloat(p.estoque_atual) / parseFloat(p.consumo_dia)) : 999;
+        const cls  = dias2 <= 3 ? 'days-crit' : (dias2 <= 7 ? 'days-warn' : 'days-ok');
+        const ico  = dias2 <= 3 ? '🔴' : (dias2 <= 7 ? '⚠️' : '✅');
+        const lbl  = dias2 >= 999 ? 'Estável' : (dias2 <= 3 ? 'Comprar urgente' : (dias2 <= 7 ? 'Comprar em breve' : 'OK por '+dias2+' dias'));
+        return '<tr>'+
+          '<td style="font-weight:600">'+esc(p.nome)+'</td>'+
+          '<td style="text-align:right;color:var(--text3);font-size:12px">'+parseFloat(p.estoque_atual).toFixed(2).replace('.',',')+' '+esc(p.unidade)+'</td>'+
+          '<td style="text-align:right;color:var(--text3);font-size:12px">'+parseFloat(p.consumo_dia).toFixed(2).replace('.',',')+'/dia</td>'+
+          '<td style="text-align:right;font-weight:700;font-size:15px">'+(dias2>=999?'—':dias2)+'</td>'+
+          '<td><span class="days-badge '+cls+'">'+ico+' '+lbl+'</span></td>'+
+        '</tr>';
+      }).join('')+'</tbody>';
+    document.getElementById('dash-previsao-card').style.display = '';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1117,11 +1306,13 @@ async function openPedidoDetail(id) {
   const N={aguardando:'preparando',preparando:'pronto',pronto:'entregue'};
   const NL={aguardando:'Iniciar preparo',preparando:'Marcar pronto',pronto:'Marcar entregue'};
   let actHtml = '<button class="btn btn-secondary" onclick="closeModal(\'modal-pedido\')">Fechar</button>';
+  actHtml = '<button class="btn btn-secondary" onclick="imprimirPedido('+p.id+')" title="Imprimir comanda">🖨️ Imprimir</button>' + actHtml;
   if (N[p.status]) actHtml = '<button class="btn btn-primary" onclick="advancePedido('+p.id+',\''+N[p.status]+'\');closeModal(\'modal-pedido\')">'+NL[p.status]+' →</button>' + actHtml;
   if (p.status!=='cancelado'&&p.status!=='entregue')
     actHtml = '<button class="btn btn-danger btn-sm" onclick="openCancel('+p.id+');closeModal(\'modal-pedido\')">Cancelar pedido</button>' + actHtml;
   document.getElementById('modal-ped-actions').innerHTML = actHtml;
 
+  window._pedidoAtual = p;
   openModal('modal-pedido');
 }
 
@@ -1748,7 +1939,85 @@ document.getElementById('btn-bkp-json')?.addEventListener('click', async () => {
 
   loadDashboard();
   setInterval(loadDashboard, 15000);
+
+  // Alertas de estoque baixo no painel
+  (async () => {
+    try {
+      const res = await fetch('../../totem/api/estoque_alertas.php'.replace('../../totem','..'), {
+        headers: {'X-CSRF-Token': CSRF}
+      });
+      // usa api relativa
+      const r = await fetch('../api/estoque_alertas.php', {headers:{'X-CSRF-Token':CSRF}});
+      const d = await r.json();
+      if (d.success && d.total > 0) {
+        const banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#7f1d1d;border:1px solid #ef4444;color:#fca5a5;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:9998;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+        banner.textContent = '⚠️ ' + d.total + ' insumo(s) com estoque baixo — clique para ver';
+        banner.onclick = () => { window.open('estoque/','_blank'); banner.remove(); };
+        document.body.appendChild(banner);
+        setTimeout(() => banner.remove(), 15000);
+      }
+    } catch {}
+  })();
 })();
+
+async function imprimirPedido(pedidoId) {
+  try {
+    const res = await fetch('../api/imprimir.php', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRF-Token':CSRF},
+      body: JSON.stringify({pedido_id: pedidoId}),
+    });
+    const d = await res.json();
+    if (d.success) toast('Imprimindo...', 'ok');
+    else {
+      // Fallback: abre janela de impressão do browser
+      const w = window.open('', '_blank', 'width=400,height=600');
+      const ped = window._pedidoAtual || {};
+      w.document.write(gerarHtmlCupom(ped));
+      w.document.close();
+      w.print();
+    }
+  } catch {
+    toast('Impressora não configurada', 'err');
+  }
+}
+
+function gerarHtmlCupom(p) {
+  if (!p || !p.numero_pedido) return '<p>Dados não disponíveis</p>';
+  const itens = (p.itens || []).map(i =>
+    `<tr><td>${i.qtd}x ${i.nome}</td><td style="text-align:right">R$ ${parseFloat(i.sub||0).toFixed(2).replace('.',',')}</td></tr>`
+  ).join('');
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>body{font-family:monospace;font-size:13px;width:300px;margin:0 auto}
+  h2{text-align:center;font-size:15px}table{width:100%;border-collapse:collapse}
+  td{padding:3px 0}hr{border:1px dashed #000}
+  .total{font-size:16px;font-weight:bold;text-align:right}
+  </style></head><body>
+  <h2>Café Comunhão</h2><hr>
+  <p>Pedido: #${p.numero_pedido}</p>
+  <p>Data: ${new Date().toLocaleString('pt-BR')}</p><hr>
+  <table>${itens}</table><hr>
+  <div class="total">Total: R$ ${parseFloat(p.total||0).toFixed(2).replace('.',',')}</div>
+  <p>Pagamento: ${p.forma_pagamento||''}</p><hr>
+  <p style="text-align:center">Obrigado!</p>
+  </body></html>`;
+}
+
+async function fazBackup(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-backup');
+  btn.textContent = '⏳ Gerando...';
+  btn.style.pointerEvents = 'none';
+  try {
+    const res = await fetch('backup.php', {headers:{'X-CSRF-Token':CSRF}});
+    const d = await res.json();
+    if (d.success) toast('✅ ' + d.message, 'ok');
+    else toast('Erro: ' + (d.error||'falha'), 'err');
+  } catch { toast('Erro ao conectar', 'err'); }
+  btn.textContent = '💾 Backup BD';
+  btn.style.pointerEvents = '';
+}
 </script>
 <?php endif; ?>
 </body>
