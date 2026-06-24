@@ -4,17 +4,20 @@
  * Chamado uma vez — leituras subsequentes usam getenv().
  */
 (static function (): void {
-    $file = dirname(__DIR__) . '/.env';
-    if (!is_file($file)) return;
+    $root = dirname(__DIR__);
 
-    foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-        $line = trim($line);
-        if ($line === '' || $line[0] === '#') continue;
-        if (!str_contains($line, '=')) continue;
-        [$key, $val] = explode('=', $line, 2);
-        $key = trim($key);
-        $val = trim($val);
-        if (!isset($_ENV[$key]) && !getenv($key)) {
+    foreach (['.env', '.env.local'] as $filename) {
+        $file = $root . '/' . $filename;
+        if (!is_file($file)) continue;
+
+        foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] === '#') continue;
+            if (!str_contains($line, '=')) continue;
+            [$key, $val] = explode('=', $line, 2);
+            $key = trim($key);
+            $val = trim($val);
+            // .env.local sempre sobrescreve .env
             putenv("{$key}={$val}");
             $_ENV[$key] = $val;
         }

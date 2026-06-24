@@ -1,419 +1,425 @@
 <?php
-ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Lax');
 session_start();
-if (!isset($_SESSION['admin_id'])) {
-    header('Location: ./');
-    exit;
-}
 require_once '../config/db.php';
+require_once 'api/auth.php';
+requireAdmin();
 
 $dataIni = $_GET['data_ini'] ?? date('Y-m-d');
 $dataFim = $_GET['data_fim'] ?? date('Y-m-d');
 
-// Basic sanity
-$dataIni = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dataIni) ? $dataIni : date('Y-m-d');
-$dataFim = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dataFim) ? $dataFim : date('Y-m-d');
-
-$autoprint = isset($_GET['print']) && $_GET['print'] === '1';
+function fmtBr($v) {
+    return 'R$ ' . number_format((float)$v, 2, ',', '.');
+}
+function dataBr($d) {
+    return date('d/m/Y', strtotime($d));
+}
 
 try {
     $db = getDB();
 
-    // Config
-    $cfgStmt = $db->query("SELECT chave, valor FROM totem_configuracoes WHERE chave IN ('loja_nome','loja_cnpj','loja_endereco','loja_telefone')");
-    $cfgRows = $cfgStmt ? $cfgStmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
-    $lojaNome     = $cfgRows['loja_nome']     ?? 'Café Comunhão';
-    $lojaCnpj     = $cfgRows['loja_cnpj']     ?? '';
-    $lojaEndereco = $cfgRows['loja_endereco'] ?? '';
-    $lojaTel      = $cfgRows['loja_telefone'] ?? '';
-
     // KPIs
-    $kpi = $db->prepare("
+    $stmtKpi = $db->prepare("
         SELECT
-            COALESCE(SUM(CASE WHEN status != 'cancelado' THEN total  ELSE 0 END),0) AS faturamento,
-            COALESCE(COUNT(CASE WHEN status != 'cancelado' THEN 1    END),0)        AS pedidos,
-            COALESCE(AVG(CASE WHEN status != 'cancelado' THEN total  END),0)        AS ticket_medio,
-            COALESCE(SUM(CASE WHEN status = 'cancelado'  THEN 1     ELSE 0 END),0) AS cancelados
-          FROM totem_pedidos
-         WHERE DATE(criado_em) BETWEEN ? AND ?
+            COALESCE(SUM(CASE WHEN status!='cancelado' THEN total END),0)  AS faturamento,
+            COUNT(CASE WHEN status!='cancelado' THEN 1 END)                AS pedidos,
+            COALESCE(AVG(CASE WHEN status!='cancelado' THEN total END),0)  AS ticket_medio,
+            COUNT(CASE WHEN status='cancelado' THEN 1 END)                 AS cancelados
+        FROM totem_pedidos
+        WHERE DATE(criado_em) BETWEEN ? AND ?
     ");
-    $kpi->execute([$dataIni, $dataFim]);
-    $kpiData = $kpi->fetch();
+    $stmtKpi->execute([$dataIni, $dataFim]);
+    $kpi = $stmtKpi->fetch();
 
-    // Itens totais
-    $itens = $db->prepare("
-        SELECT COALESCE(SUM(ip.quantidade),0) AS qtd
-          FROM totem_itens_pedido ip
-          JOIN totem_pedidos p ON p.id = ip.pedido_id
-         WHERE DATE(p.criado_em) BETWEEN ? AND ? AND p.status != 'cancelado'
+    // Itens
+    $stmtIt = $db->prepare("
+        SELECT COALESCE(SUM(ip.quantidade),0) AS total_itens
+        FROM totem_itens_pedido ip
+        JOIN totem_pedidos p ON p.id = ip.pedido_id
+        WHERE DATE(p.criado_em) BETWEEN ? AND ? AND p.status!='cancelado'
     ");
-    $itens->execute([$dataIni, $dataFim]);
-    $totalItens = (int)$itens->fetchColumn();
-
-    // Por pagamento
-    $pag = $db->prepare("
-        SELECT forma_pagamento, COUNT(*) AS qtd, SUM(total) AS total
-          FROM totem_pedidos
-         WHERE DATE(criado_em) BETWEEN ? AND ? AND status != 'cancelado'
-         GROUP BY forma_pagamento ORDER BY total DESC
-    ");
-    $pag->execute([$dataIni, $dataFim]);
-    $porPagamento = $pag->fetchAll();
-
-    // Top produtos
-    $top = $db->prepare("
-        SELECT ip.nome_produto, SUM(ip.quantidade) AS qtd, SUM(ip.subtotal) AS total
-          FROM totem_itens_pedido ip
-          JOIN totem_pedidos p ON p.id = ip.pedido_id
-         WHERE DATE(p.criado_em) BETWEEN ? AND ? AND p.status != 'cancelado'
-         GROUP BY ip.nome_produto
-         ORDER BY qtd DESC LIMIT 20
-    ");
-    $top->execute([$dataIni, $dataFim]);
-    $topProdutos = $top->fetchAll();
+    $stmtIt->execute([$dataIni, $dataFim]);
+    $itensRow = $stmtIt->fetch();
 
     // Faturamento por dia
-    $dias = $db->prepare("
+    $stmtDias = $db->prepare("
         SELECT DATE(criado_em) AS dia, COUNT(*) AS pedidos, SUM(total) AS total
-          FROM totem_pedidos
-         WHERE DATE(criado_em) BETWEEN ? AND ? AND status != 'cancelado'
-         GROUP BY DATE(criado_em) ORDER BY dia ASC
+        FROM totem_pedidos
+        WHERE DATE(criado_em) BETWEEN ? AND ? AND status!='cancelado'
+        GROUP BY DATE(criado_em) ORDER BY dia
     ");
-    $dias->execute([$dataIni, $dataFim]);
-    $porDia = $dias->fetchAll();
+    $stmtDias->execute([$dataIni, $dataFim]);
+    $porDia = $stmtDias->fetchAll();
 
-    // Hora pico
-    $horaQ = $db->prepare("
-        SELECT EXTRACT(HOUR FROM criado_em)::int AS hora, COUNT(*) AS qtd
-          FROM totem_pedidos
-         WHERE DATE(criado_em) BETWEEN ? AND ? AND status != 'cancelado'
-         GROUP BY hora ORDER BY hora
+    // Top produtos
+    $stmtProd = $db->prepare("
+        SELECT ip.nome_produto, SUM(ip.quantidade) AS qtd, SUM(ip.subtotal) AS receita,
+               AVG(ip.preco_unitario) AS preco_medio
+        FROM totem_itens_pedido ip
+        JOIN totem_pedidos p ON p.id = ip.pedido_id
+        WHERE DATE(p.criado_em) BETWEEN ? AND ? AND p.status!='cancelado'
+        GROUP BY ip.nome_produto
+        ORDER BY qtd DESC LIMIT 10
     ");
-    $horaQ->execute([$dataIni, $dataFim]);
-    $horaPico = $horaQ->fetchAll();
+    $stmtProd->execute([$dataIni, $dataFim]);
+    $produtos = $stmtProd->fetchAll();
 
-    // Por origem
-    $ori = $db->prepare("
-        SELECT COALESCE(origem,'totem') AS origem, COUNT(*) AS qtd, SUM(total) AS total
-          FROM totem_pedidos
-         WHERE DATE(criado_em) BETWEEN ? AND ? AND status != 'cancelado'
-         GROUP BY origem ORDER BY total DESC
+    // Por pagamento
+    $stmtPag = $db->prepare("
+        SELECT forma_pagamento, COUNT(*) AS qtd, SUM(total) AS total
+        FROM totem_pedidos
+        WHERE DATE(criado_em) BETWEEN ? AND ? AND status!='cancelado'
+        GROUP BY forma_pagamento ORDER BY total DESC
     ");
-    $ori->execute([$dataIni, $dataFim]);
-    $porOrigem = $ori->fetchAll();
+    $stmtPag->execute([$dataIni, $dataFim]);
+    $porPag = $stmtPag->fetchAll();
 
-    // Pedidos completos (para tabela)
-    $lista = $db->prepare("
-        SELECT p.numero_pedido AS numero, p.criado_em, p.tipo_consumo,
-               p.forma_pagamento, p.status, p.total, p.origem, p.cpf,
-               string_agg(i.nome_produto || ' x' || i.quantidade, ', ' ORDER BY i.id) AS itens
-          FROM totem_pedidos p
-          JOIN totem_itens_pedido i ON i.pedido_id = p.id
-         WHERE DATE(p.criado_em) BETWEEN ? AND ?
-         GROUP BY p.id
-         ORDER BY p.criado_em DESC
-         LIMIT 500
+    // Taxas
+    $taxaCred = (float)($db->query("SELECT COALESCE(valor,'2.5') FROM totem_configuracoes WHERE chave='taxa_credito'")->fetchColumn() ?: 2.5);
+    $taxaDeb  = (float)($db->query("SELECT COALESCE(valor,'1.5') FROM totem_configuracoes WHERE chave='taxa_debito'")->fetchColumn() ?: 1.5);
+
+    // Nome da loja
+    $nomeLoja = $db->query("SELECT COALESCE(valor,'Minha Loja') FROM totem_configuracoes WHERE chave='nome_loja'")->fetchColumn() ?: 'Minha Loja';
+
+    // Meta
+    $metaFat = (float)($db->query("SELECT COALESCE(valor,'0') FROM totem_configuracoes WHERE chave='meta_fat_mes'")->fetchColumn() ?: 0);
+
+    // Melhor dia
+    $melhorDia = null;
+    $melhorVal = 0;
+    foreach ($porDia as $d) {
+        if ((float)$d['total'] > $melhorVal) {
+            $melhorVal = (float)$d['total'];
+            $melhorDia = $d['dia'];
+        }
+    }
+
+    // Cross-sell
+    $stmtCs = $db->prepare("
+        SELECT a.nome_produto AS prod_a, b.nome_produto AS prod_b, COUNT(*) AS ocorrencias
+        FROM totem_itens_pedido a
+        JOIN totem_itens_pedido b ON a.pedido_id=b.pedido_id AND a.produto_id<b.produto_id
+        JOIN totem_pedidos p ON p.id=a.pedido_id
+        WHERE DATE(p.criado_em) BETWEEN ? AND ? AND p.status!='cancelado'
+        GROUP BY a.nome_produto, b.nome_produto
+        HAVING COUNT(*)>=2
+        ORDER BY ocorrencias DESC LIMIT 3
     ");
-    $lista->execute([$dataIni, $dataFim]);
-    $pedidosLista = $lista->fetchAll();
+    $stmtCs->execute([$dataIni, $dataFim]);
+    $crossSell = $stmtCs->fetchAll();
 
 } catch (PDOException $e) {
-    die('Erro de banco: ' . htmlspecialchars($e->getMessage()));
+    die('<p>Erro ao gerar relatorio: ' . htmlspecialchars($e->getMessage()) . '</p>');
 }
 
-function fmt(float $v): string {
-    return 'R$ ' . number_format($v, 2, ',', '.');
-}
-function fmtDate(string $d): string {
-    return (new DateTime($d))->format('d/m/Y');
-}
-function fmtDT(string $d): string {
-    return (new DateTime($d))->format('d/m/Y H:i');
+// Calcular custos
+$totalCusto = 0;
+$custosArr = [];
+foreach ($porPag as $p) {
+    $taxa = match($p['forma_pagamento']) { 'credito' => $taxaCred, 'debito' => $taxaDeb, default => 0.0 };
+    $custo = round((float)$p['total'] * $taxa / 100, 2);
+    $totalCusto += $custo;
+    $custosArr[] = array_merge($p, ['taxa' => $taxa, 'custo' => $custo, 'liquido' => round((float)$p['total'] - $custo, 2)]);
 }
 
-$titlePeriodo = $dataIni === $dataFim
-    ? 'Relatório de ' . fmtDate($dataIni)
-    : 'Relatório de ' . fmtDate($dataIni) . ' a ' . fmtDate($dataFim);
+// Taxa cancelamento
+$taxaCancel = (int)$kpi['pedidos'] + (int)$kpi['cancelados'] > 0
+    ? round(((int)$kpi['cancelados'] / ((int)$kpi['pedidos'] + (int)$kpi['cancelados'])) * 100, 1)
+    : 0;
 
-$statusLabel = ['aguardando'=>'Aguardando','preparando'=>'Preparando','pronto'=>'Pronto','entregue'=>'Entregue','cancelado'=>'Cancelado'];
-?>
-<!DOCTYPE html>
+// Recomendacoes
+$recomendacoes = [];
+if ($taxaCancel > 5) {
+    $recomendacoes[] = ['tipo'=>'warn', 'txt'=>"Taxa de cancelamento de {$taxaCancel}% esta acima do ideal (5%). Investigue as causas mais frequentes."];
+}
+$econPix = 0;
+foreach ($custosArr as $c) {
+    if (!in_array($c['forma_pagamento'], ['pix','dinheiro'])) $econPix += $c['custo'];
+}
+if ($econPix > 0) {
+    $recomendacoes[] = ['tipo'=>'info', 'txt'=>"Incentivar pagamentos em PIX economizaria " . fmtBr($econPix) . " em taxas no periodo."];
+}
+if (!empty($crossSell)) {
+    $cs0 = $crossSell[0];
+    $recomendacoes[] = ['tipo'=>'info', 'txt'=>"Cross-sell detectado: \"" . htmlspecialchars($cs0['prod_a']) . "\" + \"" . htmlspecialchars($cs0['prod_b']) . "\" aparecem juntos {$cs0['ocorrencias']}x. Considere criar um combo."];
+}
+if (!empty($produtos)) {
+    $top = $produtos[0];
+    $recomendacoes[] = ['tipo'=>'ok', 'txt'=>"Produto mais vendido: \"" . htmlspecialchars($top['nome_produto']) . "\" com {$top['qtd']} unidades. Garanta estoque e destaque no totem."];
+}
+if ($metaFat > 0 && (float)$kpi['faturamento'] < $metaFat * 0.7) {
+    $pctM = round(((float)$kpi['faturamento'] / $metaFat) * 100);
+    $recomendacoes[] = ['tipo'=>'warn', 'txt'=>"Meta de faturamento: " . fmtBr($metaFat) . " — atingiu {$pctM}% ate o momento. Acoes de marketing podem ajudar."];
+}
+
+$totalFat = (float)$kpi['faturamento'];
+$diasSemana = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
+$pagLabels = ['pix'=>'PIX','credito'=>'Credito','debito'=>'Debito','dinheiro'=>'Dinheiro'];
+?><!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title><?= htmlspecialchars($titlePeriodo) ?> — <?= htmlspecialchars($lojaNome) ?></title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relatorio Executivo — <?= htmlspecialchars($nomeLoja) ?></title>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--accent:#cc3300;--light:#f8f8f8;--border:#d0d0d0}
-body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff;line-height:1.4}
-
-/* ── Toolbar (screen only) ── */
-.toolbar{background:#1e2029;color:#f0f2f8;padding:10px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:10}
-.toolbar h1{font-size:15px;flex:1}
-.toolbar button,.toolbar a{background:var(--accent);color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;font-family:Arial,sans-serif}
-.toolbar a.sec{background:#444}
-@media print{.toolbar,.no-print{display:none!important}}
-
-/* ── Report body ── */
-.report{max-width:940px;margin:0 auto;padding:20px}
-@media print{.report{max-width:100%;padding:4mm 6mm}}
-
-.report-header{text-align:center;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid var(--accent)}
-.report-header h1{font-size:20px;color:var(--accent);margin-bottom:4px}
-.report-header .sub{font-size:11px;color:#555}
-.report-period{font-size:14px;font-weight:bold;margin-top:8px}
-
-.section{margin-bottom:22px}
-.section-title{font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);border-bottom:1px solid var(--accent);padding-bottom:4px;margin-bottom:10px}
-
-/* KPIs */
-.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
-@media print{.kpi-grid{grid-template-columns:repeat(5,1fr)}}
-.kpi-card{border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center;background:var(--light)}
-.kpi-label{font-size:9px;text-transform:uppercase;letter-spacing:0.4px;color:#666;margin-bottom:4px}
-.kpi-value{font-size:18px;font-weight:bold;color:var(--accent)}
-.kpi-sub{font-size:9px;color:#888;margin-top:2px}
-
-/* Tables */
-table{width:100%;border-collapse:collapse;font-size:10px}
-th{background:#2a2a2a;color:#fff;text-align:left;padding:5px 8px;font-size:10px}
-td{padding:4px 8px;border-bottom:1px solid #ebebeb;vertical-align:top}
-tr:nth-child(even) td{background:var(--light)}
-.num{text-align:right}
-.center{text-align:center}
-
-/* Two-col layout for print */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:600px){.two-col{grid-template-columns:1fr}}
-
-/* Bar chart */
-.bar-wrap{margin:6px 0}
-.bar-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:9px}
-.bar-label{min-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar-track{flex:1;background:#e8e8e8;border-radius:2px;height:12px;position:relative}
-.bar-fill{height:100%;background:var(--accent);border-radius:2px;min-width:2px}
-.bar-val{min-width:60px;text-align:right;color:#444}
-
-.badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold}
-.badge-entregue{background:#d1fae5;color:#065f46}
-.badge-pronto{background:#dbeafe;color:#1e3a8a}
-.badge-preparando{background:#fef9c3;color:#713f12}
-.badge-aguardando{background:#f3f4f6;color:#374151}
-.badge-cancelado{background:#fee2e2;color:#991b1b}
-
-.footer-stamp{margin-top:24px;padding-top:10px;border-top:1px solid var(--border);font-size:9px;color:#aaa;text-align:center}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a1a;background:#fff}
+@media print{
+  body{font-size:11px}
+  .no-print{display:none!important}
+  .page-break{page-break-before:always;break-before:always}
+  @page{size:A4 portrait;margin:15mm}
+}
+@media screen{
+  body{background:#f0f0f0}
+  .page{background:#fff;width:210mm;min-height:297mm;margin:20px auto;padding:18mm;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+  .print-btn{position:fixed;top:20px;right:20px;z-index:100}
+}
+.report-header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:3px solid #ff5500;margin-bottom:22px}
+.report-logo{font-size:22px;font-weight:900;color:#ff5500;letter-spacing:-1px}
+.report-meta{text-align:right}
+.report-meta h1{font-size:15px;font-weight:700;color:#1a1a1a}
+.report-meta p{font-size:10px;color:#666;margin-top:2px}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#ff5500;border-bottom:1px solid #eee;padding-bottom:5px;margin:18px 0 10px}
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:18px}
+.kpi-card{border:1px solid #e5e7eb;border-radius:7px;padding:10px;text-align:center}
+.kpi-label{font-size:9px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+.kpi-value{font-size:15px;font-weight:900;color:#1a1a1a;line-height:1.1}
+.kpi-sub{font-size:9px;color:#999;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px}
+th{background:#f9fafb;text-align:left;padding:6px 8px;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.3px;color:#666;border-bottom:2px solid #e5e7eb}
+td{padding:6px 8px;border-bottom:1px solid #f3f4f6;color:#1a1a1a}
+tr:last-child td{border-bottom:none}
+tr.total-row td{font-weight:700;border-top:2px solid #e5e7eb;background:#f9fafb}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.bar-wrap{height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden;display:inline-block;width:50px;vertical-align:middle;margin-left:4px}
+.bar-fill{height:100%;border-radius:3px;background:#ff5500}
+.insight-box{border:1px solid #e5e7eb;border-radius:7px;padding:12px;margin-bottom:10px;background:#fafafa}
+.insight-box h4{font-size:11px;font-weight:700;margin-bottom:5px;color:#333}
+.rec-list{list-style:none;display:flex;flex-direction:column;gap:6px}
+.rec-list li{padding:8px 10px;border-radius:5px;font-size:10px;line-height:1.5;border-left:3px solid}
+.rec-list li.ok{background:#f0fdf4;border-left-color:#22c55e}
+.rec-list li.warn{background:#fffbeb;border-left-color:#f59e0b}
+.rec-list li.info{background:#eff6ff;border-left-color:#3b82f6}
+.report-footer{border-top:1px solid #eee;margin-top:20px;padding-top:8px;font-size:9px;color:#999;display:flex;justify-content:space-between}
+.print-btn button{background:#ff5500;color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer}
+.print-btn button:hover{background:#e04500}
 </style>
 </head>
 <body>
 
-<div class="toolbar no-print">
-  <h1><?= htmlspecialchars($titlePeriodo) ?></h1>
-  <button onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
-  <a href="./" class="sec">← Voltar ao Admin</a>
+<div class="print-btn no-print">
+  <button onclick="window.print()">Imprimir / Salvar PDF</button>
 </div>
 
-<div class="report">
-
+<!-- PAGINA 1 -->
+<div class="page">
   <div class="report-header">
-    <h1><?= htmlspecialchars($lojaNome) ?></h1>
-    <?php if ($lojaCnpj): ?><div class="sub">CNPJ: <?= htmlspecialchars($lojaCnpj) ?></div><?php endif; ?>
-    <?php if ($lojaEndereco): ?><div class="sub"><?= htmlspecialchars($lojaEndereco) ?></div><?php endif; ?>
-    <?php if ($lojaTel): ?><div class="sub">Tel: <?= htmlspecialchars($lojaTel) ?></div><?php endif; ?>
-    <div class="report-period"><?= htmlspecialchars($titlePeriodo) ?></div>
-    <div class="sub">Gerado em <?= date('d/m/Y H:i') ?> por <?= htmlspecialchars($_SESSION['admin_nome'] ?? 'Sistema') ?></div>
-  </div>
-
-  <!-- KPIs -->
-  <div class="section">
-    <div class="section-title">Resumo do Período</div>
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Faturamento</div>
-        <div class="kpi-value"><?= fmt((float)$kpiData['faturamento']) ?></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Pedidos</div>
-        <div class="kpi-value"><?= number_format((int)$kpiData['pedidos'], 0, ',', '.') ?></div>
-        <?php if ((int)$kpiData['cancelados']): ?><div class="kpi-sub"><?= $kpiData['cancelados'] ?> cancelados</div><?php endif; ?>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Ticket Médio</div>
-        <div class="kpi-value"><?= fmt((float)$kpiData['ticket_medio']) ?></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Itens Vendidos</div>
-        <div class="kpi-value"><?= number_format($totalItens, 0, ',', '.') ?></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Médio / Pedido</div>
-        <div class="kpi-value"><?= (int)$kpiData['pedidos'] > 0 ? number_format($totalItens / (int)$kpiData['pedidos'], 1, ',', '.') : '—' ?></div>
-        <div class="kpi-sub">itens/pedido</div>
-      </div>
+    <div>
+      <div class="report-logo"><?= htmlspecialchars($nomeLoja) ?></div>
+      <div style="font-size:10px;color:#666;margin-top:3px">Relatorio Executivo de Desempenho</div>
+    </div>
+    <div class="report-meta">
+      <h1>Analise de Periodo</h1>
+      <p>De <?= dataBr($dataIni) ?> ate <?= dataBr($dataFim) ?></p>
+      <p style="margin-top:3px;color:#999">Gerado em <?= date('d/m/Y \a\s H:i') ?></p>
     </div>
   </div>
 
-  <div class="two-col">
-
-    <!-- Por pagamento -->
-    <div class="section">
-      <div class="section-title">Por Forma de Pagamento</div>
-      <?php if ($porPagamento):
-        $maxPag = max(array_column($porPagamento, 'total'));
-      ?>
-      <?php foreach ($porPagamento as $p): ?>
-      <div class="bar-row">
-        <div class="bar-label"><?= htmlspecialchars(strtoupper($p['forma_pagamento'])) ?></div>
-        <div class="bar-track"><div class="bar-fill" style="width:<?= round(($p['total']/$maxPag)*100) ?>%"></div></div>
-        <div class="bar-val"><?= fmt((float)$p['total']) ?> (<?= $p['qtd'] ?>)</div>
-      </div>
-      <?php endforeach; ?>
-      <?php else: ?><p style="color:#aaa;font-size:10px">Sem dados</p><?php endif; ?>
+  <div class="section-title">Indicadores-Chave do Periodo</div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Faturamento</div>
+      <div class="kpi-value" style="font-size:13px;color:#22c55e"><?= fmtBr($kpi['faturamento']) ?></div>
+      <div class="kpi-sub">Sem cancelados</div>
     </div>
-
-    <!-- Por origem -->
-    <div class="section">
-      <div class="section-title">Por Origem</div>
-      <?php if ($porOrigem):
-        $maxOri = max(array_column($porOrigem, 'total'));
-      ?>
-      <?php foreach ($porOrigem as $o): ?>
-      <div class="bar-row">
-        <div class="bar-label"><?= htmlspecialchars(strtoupper($o['origem'])) ?></div>
-        <div class="bar-track"><div class="bar-fill" style="width:<?= round(($o['total']/$maxOri)*100) ?>%"></div></div>
-        <div class="bar-val"><?= fmt((float)$o['total']) ?> (<?= $o['qtd'] ?>)</div>
-      </div>
-      <?php endforeach; ?>
-      <?php else: ?><p style="color:#aaa;font-size:10px">Sem dados</p><?php endif; ?>
+    <div class="kpi-card">
+      <div class="kpi-label">Pedidos</div>
+      <div class="kpi-value"><?= number_format((int)$kpi['pedidos']) ?></div>
+      <div class="kpi-sub">Confirmados</div>
     </div>
-
+    <div class="kpi-card">
+      <div class="kpi-label">Ticket Medio</div>
+      <div class="kpi-value" style="font-size:13px;color:#ff5500"><?= fmtBr($kpi['ticket_medio']) ?></div>
+      <div class="kpi-sub">Por pedido</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Itens Vendidos</div>
+      <div class="kpi-value"><?= number_format((int)$itensRow['total_itens']) ?></div>
+      <div class="kpi-sub">Unidades</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Cancelados</div>
+      <div class="kpi-value" style="color:<?= (int)$kpi['cancelados']>0?'#ef4444':'#22c55e' ?>"><?= (int)$kpi['cancelados'] ?></div>
+      <div class="kpi-sub"><?= $taxaCancel ?>% do total</div>
+    </div>
   </div>
 
-  <!-- Top produtos -->
-  <div class="section">
-    <div class="section-title">Produtos Mais Vendidos (Top 20)</div>
-    <?php if ($topProdutos):
-      $maxTop = max(array_column($topProdutos, 'qtd'));
-    ?>
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Produto</th>
-          <th class="num">Qtd</th>
-          <th class="num">Receita</th>
-          <th>Volume</th>
-        </tr>
-      </thead>
-      <tbody>
-      <?php foreach ($topProdutos as $i => $p): ?>
-        <tr>
-          <td class="center" style="color:#888"><?= $i+1 ?></td>
-          <td><?= htmlspecialchars($p['nome_produto']) ?></td>
-          <td class="num" style="font-weight:bold"><?= $p['qtd'] ?></td>
-          <td class="num"><?= fmt((float)$p['total']) ?></td>
-          <td style="width:120px">
-            <div class="bar-track" style="height:8px">
-              <div class="bar-fill" style="width:<?= round(($p['qtd']/$maxTop)*100) ?>%"></div>
-            </div>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
-    <?php else: ?><p style="color:#aaa;font-size:10px">Sem dados</p><?php endif; ?>
-  </div>
-
-  <!-- Por dia -->
-  <?php if (count($porDia) > 1): ?>
-  <div class="section">
-    <div class="section-title">Faturamento por Dia</div>
-    <?php $maxDia = max(array_column($porDia, 'total')); ?>
-    <table>
-      <thead><tr><th>Data</th><th class="num">Pedidos</th><th class="num">Faturamento</th><th>Barra</th></tr></thead>
-      <tbody>
-      <?php foreach ($porDia as $d): ?>
-        <tr>
-          <td><?= fmtDate($d['dia']) ?></td>
-          <td class="num"><?= $d['pedidos'] ?></td>
-          <td class="num" style="font-weight:bold"><?= fmt((float)$d['total']) ?></td>
-          <td style="width:160px">
-            <div class="bar-track" style="height:8px">
-              <div class="bar-fill" style="width:<?= round(($d['total']/$maxDia)*100) ?>%"></div>
-            </div>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-  <?php endif; ?>
-
-  <!-- Hora pico -->
-  <?php if ($horaPico): ?>
-  <div class="section">
-    <div class="section-title">Horário de Pico</div>
-    <?php $maxHora = max(array_column($horaPico, 'qtd')); ?>
-    <div style="display:flex;gap:4px;align-items:flex-end;height:60px;padding-bottom:14px;border-bottom:1px solid #ddd">
-      <?php for ($h = 6; $h <= 23; $h++):
-        $row = array_filter($horaPico, fn($x) => (int)$x['hora'] === $h);
-        $row = reset($row);
-        $qtd = $row ? (int)$row['qtd'] : 0;
-        $pct = $maxHora > 0 ? round(($qtd/$maxHora)*80) : 0;
-      ?>
-      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
-        <div style="width:100%;background:<?= $qtd > 0 ? 'var(--accent)' : '#e8e8e8' ?>;height:<?= $pct ?>px;border-radius:2px 2px 0 0;min-height:<?= $qtd>0?'3':'0' ?>px"></div>
-        <div style="font-size:7px;color:#888;writing-mode:vertical-lr;transform:rotate(180deg)"><?= sprintf('%02d', $h) ?>h</div>
+  <?php if ($metaFat > 0): ?>
+  <?php $pctMeta = min(100, round(((float)$kpi['faturamento'] / $metaFat) * 100)); ?>
+  <div class="insight-box">
+    <h4>Meta de Faturamento do Mes</h4>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+      <div style="flex:1;height:9px;background:#e5e7eb;border-radius:4px;overflow:hidden">
+        <div style="width:<?= $pctMeta ?>%;height:100%;background:<?= $pctMeta>=100?'#22c55e':($pctMeta>=70?'#f59e0b':'#ef4444') ?>;border-radius:4px"></div>
       </div>
-      <?php endfor; ?>
+      <div style="font-weight:700;font-size:12px"><?= $pctMeta ?>%</div>
+      <div style="color:#666;font-size:11px"><?= fmtBr($kpi['faturamento']) ?> de <?= fmtBr($metaFat) ?></div>
     </div>
   </div>
   <?php endif; ?>
 
-  <!-- Lista de pedidos -->
-  <?php if ($pedidosLista): ?>
-  <div class="section">
-    <div class="section-title">Lista de Pedidos (<?= count($pedidosLista) ?>)</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Nº</th>
-          <th>Data/Hora</th>
-          <th>Consumo</th>
-          <th>Pagamento</th>
-          <th>Status</th>
-          <th>Origem</th>
-          <th class="num">Total</th>
-          <th>Itens</th>
-        </tr>
-      </thead>
-      <tbody>
-      <?php foreach ($pedidosLista as $p): ?>
-        <tr>
-          <td style="font-weight:bold">#<?= htmlspecialchars($p['numero']) ?></td>
-          <td><?= fmtDT($p['criado_em']) ?></td>
-          <td class="center"><?= $p['tipo_consumo'] === 'local' ? '🍽️' : '🛍️' ?></td>
-          <td><?= htmlspecialchars(strtoupper($p['forma_pagamento'])) ?></td>
-          <td><span class="badge badge-<?= $p['status'] ?>"><?= $statusLabel[$p['status']] ?? $p['status'] ?></span></td>
-          <td><?= htmlspecialchars($p['origem']) ?></td>
-          <td class="num" style="font-weight:bold"><?= fmt((float)$p['total']) ?></td>
-          <td style="font-size:9px;color:#555;max-width:220px"><?= htmlspecialchars($p['itens']) ?></td>
-        </tr>
+  <div class="section-title">Faturamento por Dia</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th><th>Dia</th><th class="num">Pedidos</th><th class="num">Faturamento</th><th class="num">% Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <?php foreach ($porDia as $d):
+        $pctDia = $totalFat > 0 ? round(((float)$d['total'] / $totalFat) * 100, 1) : 0;
+        $dow = date('w', strtotime($d['dia']));
+      ?>
+      <tr>
+        <td><?= dataBr($d['dia']) ?></td>
+        <td><?= $diasSemana[$dow] ?></td>
+        <td class="num"><?= $d['pedidos'] ?></td>
+        <td class="num"><strong><?= fmtBr($d['total']) ?></strong></td>
+        <td class="num"><?= $pctDia ?>%<span class="bar-wrap"><span class="bar-fill" style="width:<?= $pctDia ?>%"></span></span></td>
+      </tr>
       <?php endforeach; ?>
-      </tbody>
-    </table>
+      <tr class="total-row">
+        <td colspan="2"><strong>TOTAL</strong></td>
+        <td class="num"><strong><?= $kpi['pedidos'] ?></strong></td>
+        <td class="num"><strong><?= fmtBr($kpi['faturamento']) ?></strong></td>
+        <td class="num"><strong>100%</strong></td>
+      </tr>
+    </tbody>
+  </table>
+  <?php if ($melhorDia): ?>
+  <div style="font-size:10px;color:#666;margin-bottom:14px">
+    Melhor dia: <strong><?= dataBr($melhorDia) ?></strong> com <strong><?= fmtBr($melhorVal) ?></strong>
   </div>
   <?php endif; ?>
 
-  <div class="footer-stamp">
-    Sistema Totem de Pedidos — Relatório gerado em <?= date('d/m/Y \à\s H:i') ?>
-    <?php if ($lojaCnpj): ?> — <?= htmlspecialchars($lojaNome) ?> / CNPJ <?= htmlspecialchars($lojaCnpj) ?><?php endif; ?>
-  </div>
+  <div class="section-title">Por Forma de Pagamento</div>
+  <table>
+    <thead>
+      <tr><th>Metodo</th><th class="num">Pedidos</th><th class="num">Receita</th><th class="num">Taxa</th><th class="num">Custo R$</th><th class="num">Liquido</th></tr>
+    </thead>
+    <tbody>
+      <?php $totalLiq = 0; foreach ($custosArr as $c): $totalLiq += $c['liquido']; ?>
+      <tr>
+        <td><?= $pagLabels[$c['forma_pagamento']] ?? htmlspecialchars($c['forma_pagamento']) ?></td>
+        <td class="num"><?= $c['qtd'] ?></td>
+        <td class="num"><?= fmtBr($c['total']) ?></td>
+        <td class="num"><?= $c['taxa'] > 0 ? $c['taxa'].'%' : '—' ?></td>
+        <td class="num" style="color:#ef4444"><?= $c['custo'] > 0 ? '-'.fmtBr($c['custo']) : '—' ?></td>
+        <td class="num"><strong><?= fmtBr($c['liquido']) ?></strong></td>
+      </tr>
+      <?php endforeach; ?>
+      <tr class="total-row">
+        <td><strong>TOTAL</strong></td><td class="num"></td>
+        <td class="num"><strong><?= fmtBr($kpi['faturamento']) ?></strong></td><td class="num"></td>
+        <td class="num" style="color:#ef4444"><strong>-<?= fmtBr($totalCusto) ?></strong></td>
+        <td class="num" style="color:#22c55e"><strong><?= fmtBr($totalLiq) ?></strong></td>
+      </tr>
+    </tbody>
+  </table>
 
+  <div class="report-footer">
+    <span><?= htmlspecialchars($nomeLoja) ?> — Relatorio Executivo</span>
+    <span>Pagina 1 de 2</span>
+  </div>
 </div>
 
-<?php if ($autoprint): ?>
-<script>window.addEventListener('load', () => window.print());</script>
-<?php endif; ?>
+<!-- PAGINA 2 -->
+<div class="page page-break">
+  <div class="report-header">
+    <div>
+      <div class="report-logo"><?= htmlspecialchars($nomeLoja) ?></div>
+      <div style="font-size:10px;color:#666;margin-top:3px">Relatorio Executivo — Produtos e Recomendacoes</div>
+    </div>
+    <div class="report-meta">
+      <h1>Top Produtos &amp; Insights</h1>
+      <p>De <?= dataBr($dataIni) ?> ate <?= dataBr($dataFim) ?></p>
+    </div>
+  </div>
+
+  <div class="section-title">Top 10 Produtos por Volume</div>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Produto</th><th class="num">Qtd</th><th class="num">Preco Medio</th><th class="num">Receita</th><th class="num">% Receita</th></tr>
+    </thead>
+    <tbody>
+      <?php foreach ($produtos as $i => $p):
+        $pctRec = $totalFat > 0 ? round(((float)$p['receita'] / $totalFat) * 100, 1) : 0;
+      ?>
+      <tr>
+        <td style="color:#999;font-weight:700"><?= $i+1 ?></td>
+        <td><strong><?= htmlspecialchars($p['nome_produto']) ?></strong></td>
+        <td class="num"><?= $p['qtd'] ?>x</td>
+        <td class="num"><?= fmtBr($p['preco_medio']) ?></td>
+        <td class="num"><?= fmtBr($p['receita']) ?></td>
+        <td class="num"><?= $pctRec ?>%<span class="bar-wrap"><span class="bar-fill" style="width:<?= $pctRec ?>%;background:#3b82f6"></span></span></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+
+  <?php if (!empty($crossSell)): ?>
+  <div class="section-title">Pares Mais Pedidos Juntos (Cross-sell)</div>
+  <table>
+    <thead>
+      <tr><th>Produto A</th><th>Produto B</th><th class="num">Ocorrencias</th><th>Acao Sugerida</th></tr>
+    </thead>
+    <tbody>
+      <?php foreach ($crossSell as $cs): ?>
+      <tr>
+        <td><?= htmlspecialchars($cs['prod_a']) ?></td>
+        <td><?= htmlspecialchars($cs['prod_b']) ?></td>
+        <td class="num"><strong><?= $cs['ocorrencias'] ?>x</strong></td>
+        <td style="color:#666">Criar combo com desconto</td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php endif; ?>
+
+  <div class="section-title">Recomendacoes Automaticas</div>
+  <?php if (!empty($recomendacoes)): ?>
+  <ul class="rec-list">
+    <?php foreach ($recomendacoes as $r): ?>
+    <li class="<?= $r['tipo'] ?>"><?= $r['txt'] ?></li>
+    <?php endforeach; ?>
+  </ul>
+  <?php else: ?>
+  <p style="color:#666;font-size:11px">Nenhuma recomendacao critica para o periodo analisado. Negocio em boa forma!</p>
+  <?php endif; ?>
+
+  <div style="margin-top:18px">
+    <div class="section-title">Resumo Executivo</div>
+    <div class="insight-box">
+      <h4>Analise do periodo de <?= dataBr($dataIni) ?> a <?= dataBr($dataFim) ?></h4>
+      <p style="margin-top:6px;line-height:1.6;color:#444;font-size:11px">
+        No periodo analisado, a loja registrou <strong><?= fmtBr($kpi['faturamento']) ?></strong> em faturamento com
+        <strong><?= number_format((int)$kpi['pedidos']) ?> pedidos</strong> confirmados.
+        O ticket medio foi de <strong><?= fmtBr($kpi['ticket_medio']) ?></strong> por pedido.
+        <?php if ($totalCusto > 0): ?>
+        As taxas de cartao representaram <strong><?= fmtBr($totalCusto) ?></strong> em custos operacionais.
+        <?php endif; ?>
+        <?php if ($melhorDia): ?>
+        O melhor dia de faturamento foi <strong><?= dataBr($melhorDia) ?></strong> com <strong><?= fmtBr($melhorVal) ?></strong>.
+        <?php endif; ?>
+      </p>
+    </div>
+  </div>
+
+  <div class="report-footer">
+    <span><?= htmlspecialchars($nomeLoja) ?> — Relatorio Executivo</span>
+    <span>Pagina 2 de 2 · Gerado automaticamente pelo sistema Totem</span>
+  </div>
+</div>
+
 </body>
 </html>
