@@ -4,6 +4,7 @@ ini_set('session.cookie_httponly', '1');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.cookie_samesite', 'Lax');
 session_start();
+require_once '../config/session_guard.php';
 
 require_once '../config/db.php';
 require_once '../config/audit.php';
@@ -41,16 +42,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'logi
         if ($adm && $adm['ativo'] && password_verify($senha, $adm['senha'])) {
             loginLimparTentativas($db, $ip);
             session_regenerate_id(true); // Previne session fixation
-            $_SESSION['admin_id']    = $adm['id'];
-            $_SESSION['admin_nome']  = $adm['nome'];
-            $_SESSION['admin_email'] = $adm['email'];
-            $_SESSION['admin_role']  = $adm['role'] ?? 'operador';
-            $_SESSION['_csrf']       = bin2hex(random_bytes(32)); // Novo token após login
+            $_SESSION['_csrf'] = bin2hex(random_bytes(32)); // Novo token após login
 
             $db->prepare("UPDATE totem_admin SET ultimo_login=NOW() WHERE id=?")->execute([$adm['id']]);
             $db->prepare("INSERT INTO totem_sessoes (admin_id, ip, user_agent) VALUES (?,?,?)")
                ->execute([$adm['id'], $ip, $_SERVER['HTTP_USER_AGENT'] ?? null]);
             auditLog($db, 'login', 'auth', $adm['id'], "Login: {$adm['email']} IP:{$ip}");
+
+            // Se admin tem 2FA ativo, pedir código antes de entrar
+            if (!empty($adm['totp_ativo'])) {
+                $_SESSION['_2fa_pending']  = $adm['id'];
+                $_SESSION['_2fa_nome']     = $adm['nome'];
+                $_SESSION['_2fa_email']    = $adm['email'];
+                $_SESSION['_2fa_role']     = $adm['role'] ?? 'operador';
+                header('Location: 2fa/verificar.php');
+                exit;
+            }
+
+            $_SESSION['admin_id']    = $adm['id'];
+            $_SESSION['admin_nome']  = $adm['nome'];
+            $_SESSION['admin_email'] = $adm['email'];
+            $_SESSION['admin_role']  = $adm['role'] ?? 'operador';
             header('Location: index.php');
             exit;
         }
@@ -67,6 +79,7 @@ $adminNome  = $_SESSION['admin_nome']  ?? '';
 $adminEmail = $_SESSION['admin_email'] ?? '';
 $adminRole  = $_SESSION['admin_role']  ?? 'operador';
 $isAdmin    = $adminRole === 'admin';
+$showTimeout = isset($_GET['timeout']);
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -471,6 +484,9 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
     <?php if ($err): ?>
     <div class="err-msg"><?= htmlspecialchars($err) ?></div>
     <?php endif; ?>
+    <?php if ($showTimeout): ?>
+    <div class="err-msg">⏱ Sessão expirada por inatividade. Faça login novamente.</div>
+    <?php endif; ?>
     <form method="POST" style="display:flex;flex-direction:column;gap:16px">
       <input type="hidden" name="_action" value="login">
       <div class="field">
@@ -519,18 +535,32 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
     </nav>
 
     <div class="sb-links">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text4);padding:8px 10px 4px">Operação</div>
       <a href="../" class="sb-link" target="_blank">🖥️ Totem</a>
       <a href="../kds/" class="sb-link" target="_blank">👨‍🍳 KDS Cozinha</a>
       <a href="../caixa/" class="sb-link" target="_blank">💰 Caixa</a>
+      <a href="caixa/turno.php" class="sb-link" target="_blank">🔓 Abrir/Fechar Caixa</a>
+      <a href="../garcom/" class="sb-link" target="_blank">👨‍💼 App Garçom</a>
+      <a href="../garcom/comanda.php" class="sb-link" target="_blank">📝 Comanda Digital</a>
       <a href="../painel/" class="sb-link" target="_blank">📺 Painel TV</a>
       <a href="mesas/" class="sb-link" target="_blank">🪑 Mesas</a>
-      <a href="estoque/" class="sb-link" target="_blank">📦 Estoque</a>
-      <a href="clientes/" class="sb-link" target="_blank">⭐ Fidelidade</a>
       <a href="delivery/" class="sb-link" target="_blank">🛵 Delivery</a>
-      <a href="../garcom/" class="sb-link" target="_blank">👨‍💼 App Garçom</a>
+
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text4);padding:8px 10px 4px;margin-top:4px">Financeiro</div>
       <a href="dashboard/" class="sb-link" target="_blank">📊 Dashboard</a>
+      <a href="dre/" class="sb-link" target="_blank">📑 DRE / Despesas</a>
       <a href="relatorios/" class="sb-link" target="_blank">📋 Relatórios</a>
+      <a href="relatorios/cardapio.php" class="sb-link" target="_blank">🍽️ Análise Cardápio</a>
+
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text4);padding:8px 10px 4px;margin-top:4px">Clientes</div>
+      <a href="clientes/" class="sb-link" target="_blank">⭐ Fidelidade</a>
+      <a href="../status/fidelidade.php" class="sb-link" target="_blank">🏆 Pontos no Totem</a>
+      <a href="estoque/" class="sb-link" target="_blank">📦 Estoque</a>
+
       <?php if ($isAdmin): ?>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text4);padding:8px 10px 4px;margin-top:4px">Configurações</div>
+      <a href="2fa/setup.php" class="sb-link" target="_blank">🔐 Segurança 2FA</a>
+      <a href="email/" class="sb-link" target="_blank">📧 E-mail Semanal</a>
       <a href="#" class="sb-link" id="btn-backup" onclick="fazBackup(event)">💾 Backup BD</a>
       <?php endif; ?>
     </div>
@@ -3019,6 +3049,29 @@ async function fazBackup(e) {
   btn.textContent = '💾 Backup BD';
   btn.style.pointerEvents = '';
 }
+
+// ── Session timeout warning — avisa 2 min antes ──────────────────────
+(function() {
+  const TIMEOUT     = 1800 * 1000; // 30 min em ms
+  const WARN_BEFORE = 120  * 1000; // avisa 2 min antes
+  let warnTimer, logoutTimer;
+
+  function resetTimers() {
+    clearTimeout(warnTimer);
+    clearTimeout(logoutTimer);
+    warnTimer = setTimeout(() => {
+      toast('⏱ Sessão expira em 2 minutos por inatividade', 'err');
+    }, TIMEOUT - WARN_BEFORE);
+    logoutTimer = setTimeout(() => {
+      window.location.reload();
+    }, TIMEOUT);
+  }
+
+  ['click', 'keydown', 'mousemove', 'touchstart'].forEach(e =>
+    document.addEventListener(e, resetTimers, {passive: true}));
+
+  resetTimers();
+})();
 </script>
 <?php endif; ?>
 </body>
