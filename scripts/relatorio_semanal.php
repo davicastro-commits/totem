@@ -167,13 +167,13 @@ try {
     // ── 6. Faturamento por forma de pagamento ────────────────────────────────
     $pagStmt = $db->prepare("
         SELECT
-            COALESCE(pagamento, 'Não informado') AS pagamento,
-            COUNT(*)                             AS pedidos,
-            COALESCE(SUM(total), 0)              AS total
+            COALESCE(forma_pagamento, 'Não informado') AS pagamento,
+            COUNT(*)                                   AS pedidos,
+            COALESCE(SUM(total), 0)                    AS total
         FROM material.totem_pedidos
         WHERE DATE(criado_em) BETWEEN ? AND ?
           AND status NOT IN ('cancelado','aguardando_pagamento')
-        GROUP BY pagamento
+        GROUP BY forma_pagamento
         ORDER BY total DESC
     ");
     $pagStmt->execute([$iniSemana, $fimSemana]);

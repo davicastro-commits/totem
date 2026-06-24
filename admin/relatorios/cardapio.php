@@ -35,7 +35,7 @@ try {
         FROM material.totem_itens_pedido ip
         JOIN material.totem_pedidos p   ON p.id  = ip.pedido_id
         JOIN material.totem_produtos pr ON pr.id = ip.produto_id
-        WHERE p.criado_em >= CURRENT_DATE - ?
+        WHERE p.criado_em >= CURRENT_DATE - CAST(? AS INTEGER) * INTERVAL '1 day'
           AND p.status NOT IN ('cancelado', 'aguardando_pagamento')
         GROUP BY pr.id, pr.nome
         HAVING SUM(ip.quantidade) > 0
