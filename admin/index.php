@@ -1096,6 +1096,30 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
               <button class="btn btn-primary" id="btn-salvar-cfg">Salvar configurações</button>
               <span id="cfg-status" style="align-self:center;font-size:13px;color:var(--green);display:none">Salvo!</span>
             </div>
+
+            <!-- n8n / WhatsApp -->
+            <div style="border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:14px;margin-top:4px">
+              <div style="font-size:13px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:8px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012 .93h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                Automações n8n / WhatsApp
+              </div>
+              <div class="field">
+                <label>URL base do n8n webhook</label>
+                <input type="text" id="cfg-n8n-url" placeholder="http://192.168.1.100:5678/webhook">
+                <small style="color:var(--text3);font-size:11px">Sem barra no final. Ex: http://192.168.1.100:5678/webhook</small>
+              </div>
+              <div class="field">
+                <label>Número WhatsApp destino (alertas)</label>
+                <input type="text" id="cfg-n8n-whatsapp" placeholder="5511999999999" maxlength="20">
+                <small style="color:var(--text3);font-size:11px">DDI + DDD + número, sem espaços. Ex: 5511999999999</small>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center">
+                <button class="btn btn-primary" id="btn-salvar-n8n">Salvar</button>
+                <button class="btn" id="btn-testar-n8n" style="background:var(--card2);color:var(--text)">Testar conexão</button>
+                <span id="n8n-status" style="font-size:13px;display:none"></span>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -2897,6 +2921,50 @@ document.getElementById('btn-salvar-cfg')?.addEventListener('click', async () =>
     st.textContent = '✗ Erro ao salvar'; st.style.color = 'var(--red)'; st.style.display = 'inline';
     toast('Erro: ' + (res.error || 'desconhecido'), 'err');
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// ── n8n / WHATSAPP ────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+(async () => {
+  const res = await fetch('api/configuracoes.php?action=listar').then(r=>r.json()).catch(()=>null);
+  if (!res?.data) return;
+  const d = res.data;
+  const u = document.getElementById('cfg-n8n-url');
+  const w = document.getElementById('cfg-n8n-whatsapp');
+  if (u && d['n8n_webhook_base']) u.value = d['n8n_webhook_base'].valor || '';
+  if (w && d['n8n_whatsapp'])     w.value = d['n8n_whatsapp'].valor || '';
+})();
+
+document.getElementById('btn-salvar-n8n')?.addEventListener('click', async () => {
+  const st = document.getElementById('n8n-status');
+  const payload = {
+    n8n_webhook_base: document.getElementById('cfg-n8n-url')?.value.trim() || '',
+    n8n_whatsapp:     document.getElementById('cfg-n8n-whatsapp')?.value.trim() || '',
+  };
+  const res = await api('configuracoes.php', { method:'POST', body: JSON.stringify(payload) });
+  st.style.display = 'inline';
+  if (res.success) { st.textContent = '✓ Salvo!'; st.style.color = 'var(--green)'; }
+  else             { st.textContent = '✗ Erro'; st.style.color = 'var(--red)'; }
+  setTimeout(() => st.style.display = 'none', 3000);
+});
+
+document.getElementById('btn-testar-n8n')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-testar-n8n');
+  const st  = document.getElementById('n8n-status');
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  st.style.display = 'none';
+  try {
+    const res = await fetch('api/webhook_test.php').then(r => r.json());
+    st.style.display = 'inline';
+    if (res.success) { st.textContent = '✓ ' + res.msg; st.style.color = 'var(--green)'; toast('Webhook enviado! Verifique o n8n.'); }
+    else             { st.textContent = '✗ ' + res.msg; st.style.color = 'var(--red)'; toast(res.msg, 'err'); }
+  } catch(e) {
+    st.style.display = 'inline';
+    st.textContent = '✗ Erro de conexão'; st.style.color = 'var(--red)';
+  }
+  btn.disabled = false; btn.textContent = 'Testar conexão';
+  setTimeout(() => st.style.display = 'none', 5000);
 });
 
 // ─────────────────────────────────────────────────────────────────────

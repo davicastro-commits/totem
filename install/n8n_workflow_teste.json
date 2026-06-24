@@ -1,0 +1,74 @@
+{
+  "name": "Café Comunhão — Teste de Conexão",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "teste",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-recebe",
+      "name": "Recebe do PHP",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "cafe-teste"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst agora = new Date().toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo'});\nreturn [{\n  json: {\n    numero: '{{SEU_NUMERO_WHATSAPP}}',\n    mensagem: `✅ *Café Comunhão* — Teste OK!\\n\\n📅 ${agora}\\n👤 Usuário: ${body.usuario || 'Admin'}\\n🔔 ${body.mensagem || 'Integração funcionando!'}`\n  }\n}];"
+      },
+      "id": "monta-mensagem",
+      "name": "Monta mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://{{SEU_EVOLUTION_API}}:8080/message/sendText/{{SUA_INSTANCIA}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "{{SUA_API_KEY}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "number", "value": "={{ $json.numero }}" },
+            { "name": "text",   "value": "={{ $json.mensagem }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "envia-whatsapp",
+      "name": "Envia WhatsApp (Evolution API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true}",
+        "options": {}
+      },
+      "id": "responde-php",
+      "name": "Responde ao PHP",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Recebe do PHP":                { "main": [[{ "node": "Monta mensagem",    "type": "main", "index": 0 }]] },
+    "Monta mensagem":               { "main": [[{ "node": "Envia WhatsApp (Evolution API)", "type": "main", "index": 0 }]] },
+    "Envia WhatsApp (Evolution API)": { "main": [[{ "node": "Responde ao PHP", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": ["cafe", "whatsapp", "teste"]
+}
