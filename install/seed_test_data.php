@@ -333,7 +333,7 @@ if ($existePed === 0) {
         ['numero_pedido'=>'P024','tipo_consumo'=>'viagem','cpf'=>'12345678901','subtotal'=>57.00,'total'=>62.00,'desconto'=>0,    'forma_pagamento'=>'pix',    'status'=>'preparando','canal'=>'delivery','cliente_id'=>$cAna,  'cupom_id'=>null,     'pontos_ganhos'=>62,'criado_em'=>'2026-06-24 08:05:00'],
         ['numero_pedido'=>'P025','tipo_consumo'=>'viagem','cpf'=>'23456789012','subtotal'=>42.00,'total'=>47.00,'desconto'=>0,    'forma_pagamento'=>'credito','status'=>'entregue',  'canal'=>'delivery','cliente_id'=>$cBruno,'cupom_id'=>null,     'pontos_ganhos'=>47,'criado_em'=>'2026-06-22 19:00:00'],
     ];
-    $nPed = insertConflict($pdo, 'totem_pedidos', $pedidos, '(numero_pedido)');
+    $nPed = insertWhere($pdo, 'totem_pedidos', $pedidos, ['numero_pedido']);
 }
 step('Pedidos', $nPed ?: $existePed);
 

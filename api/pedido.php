@@ -5,6 +5,7 @@ require_once '../config/db.php';
 require_once '../config/audit.php';
 require_once '../config/estoque_helper.php';
 require_once '../config/fidelidade_helper.php';
+require_once '../config/webhook.php';
 require_once '../config/rate_limit_api.php';
 rateLimit('pedido', 15, 60); // máx 15 pedidos/minuto por IP
 
@@ -30,6 +31,37 @@ $cpf       = strlen($cpfRaw) === 11 ? $cpfRaw : null;
 $origem    = in_array($body['origem'] ?? '', ['totem','caixa','admin']) ? ($body['origem'] ?? 'totem') : 'totem';
 $statusInicial = (!empty($body['aguardando_pagamento']) && $origem === 'totem')
     ? 'aguardando_pagamento' : 'aguardando';
+
+// Carregar configurações relevantes para o pedido
+try {
+    $dbCfg    = getDB();
+    $cfgStmt  = $dbCfg->query("
+        SELECT chave, valor FROM totem_configuracoes
+         WHERE chave IN (
+            'pagamento_pix_ativo','pagamento_credito_ativo','pagamento_debito_ativo','pagamento_dinheiro_ativo',
+            'taxa_servico_ativa','taxa_servico_percentual','totem_max_itens_pedido'
+         )
+    ");
+    $cfgRows  = $cfgStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (Throwable) { $cfgRows = []; }
+
+// Validar método de pagamento habilitado
+$pagToKey = ['pix'=>'pagamento_pix_ativo','credito'=>'pagamento_credito_ativo',
+             'debito'=>'pagamento_debito_ativo','dinheiro'=>'pagamento_dinheiro_ativo'];
+if (isset($pagToKey[$pagamento]) && ($cfgRows[$pagToKey[$pagamento]] ?? '1') === '0') {
+    http_response_code(400);
+    echo json_encode(['success'=>false,'error'=>"Forma de pagamento '{$pagamento}' não está disponível no momento."]);
+    exit;
+}
+
+// Validar máximo de itens por pedido
+$maxItens = (int)($cfgRows['totem_max_itens_pedido'] ?? 20) ?: 20;
+$totalItensCarrinho = array_sum(array_column($body['itens'], 'quantidade'));
+if ($totalItensCarrinho > $maxItens) {
+    http_response_code(400);
+    echo json_encode(['success'=>false,'error'=>"Limite de {$maxItens} itens por pedido atingido."]);
+    exit;
+}
 
 if ($cpf !== null && !validarCPF($cpf)) {
     $cpf = null;
@@ -105,13 +137,23 @@ try {
 
     $operadorId = !empty($_SESSION['admin_id']) ? (int)$_SESSION['admin_id'] : null;
 
+    // Aplicar taxa de serviço se configurada
+    $subtotal  = $total;
+    $desconto  = 0.0;
+    $taxaValor = 0.0;
+    if (($cfgRows['taxa_servico_ativa'] ?? '0') === '1') {
+        $taxaPct   = (float)($cfgRows['taxa_servico_percentual'] ?? 0);
+        $taxaValor = round($subtotal * $taxaPct / 100, 2);
+        $total     = round($subtotal + $taxaValor, 2);
+    }
+
     $stmtPed = $db->prepare("
         INSERT INTO totem_pedidos
-            (numero_pedido, tipo_consumo, cpf, subtotal, total, forma_pagamento, status, origem, operador_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (numero_pedido, tipo_consumo, cpf, subtotal, desconto, total, forma_pagamento, status, origem, operador_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         RETURNING id
     ");
-    $stmtPed->execute([$numero, $tipo, $cpf, $total, $total, $pagamento, $statusInicial, $origem, $operadorId]);
+    $stmtPed->execute([$numero, $tipo, $cpf, $subtotal, $desconto, $total, $pagamento, $statusInicial, $origem, $operadorId]);
     $pedidoId = $stmtPed->fetchColumn();
 
     $stmtItem  = $db->prepare("
@@ -139,6 +181,22 @@ try {
         try { baixarEstoquePorPedido($db, $pedidoId); } catch (Throwable) {}
         try { acumularPontosPorPedido($db, $pedidoId); } catch (Throwable) {}
     }
+
+    // Disparar webhook de novo pedido
+    try {
+        triggerN8n('novo_pedido', [
+            'pedido_id'       => $pedidoId,
+            'numero'          => $numero,
+            'total'           => $total,
+            'subtotal'        => $subtotal,
+            'taxa_servico'    => $taxaValor,
+            'forma_pagamento' => $pagamento,
+            'tipo_consumo'    => $tipo,
+            'status'          => $statusInicial,
+            'origem'          => $origem,
+            'itens_count'     => count($itens),
+        ]);
+    } catch (Throwable) {}
 
     auditLog($db, 'pedido_criado', 'pedidos', $pedidoId,
         "Pedido #{$numero} via {$origem} R$" . number_format($total, 2, ',', '.'),

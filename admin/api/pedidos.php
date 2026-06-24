@@ -5,6 +5,7 @@ require_once '../../config/db.php';
 require_once '../../config/audit.php';
 require_once '../../config/estoque_helper.php';
 require_once '../../config/fidelidade_helper.php';
+require_once '../../config/webhook.php';
 require_once 'auth.php';
 requireAdmin();
 
@@ -161,6 +162,17 @@ try {
             "Pedido #{$ped['numero_pedido']}: {$ped['status']} -> {$status}" . ($motivo ? " | Motivo: {$motivo}" : ''),
             ['status' => $ped['status']],
             ['status' => $status, 'motivo' => $motivo]);
+
+        // Disparar webhook de mudança de status
+        try {
+            triggerN8n('status_pedido', [
+                'pedido_id'     => $id,
+                'numero'        => $ped['numero_pedido'],
+                'status_antes'  => $ped['status'],
+                'status_novo'   => $status,
+                'motivo'        => $motivo ?: null,
+            ]);
+        } catch (Throwable) {}
 
         echo json_encode(['success' => true]);
 

@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/totem.css?v=20260622b">
+  <link rel="stylesheet" href="assets/css/totem.css?v=20260624v11">
 </head>
 <body>
   <div id="app">
@@ -23,7 +23,7 @@
   </div>
   <div id="receipt-container" class="receipt-container hidden"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="assets/js/totem.js?v=20260622b"></script>
+  <script src="assets/js/totem.js?v=20260624x"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

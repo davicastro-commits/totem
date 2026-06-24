@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/webhook.php';
+
 /**
  * Dá baixa automática nos insumos quando um pedido é confirmado.
  * Percorre a ficha técnica de cada produto do pedido e registra saída.
@@ -52,6 +54,20 @@ function baixarEstoquePorPedido(PDO $db, int $pedidoId): array
             $movStmt->execute([$fi['insumo_id'], $consumo, $motivo, $pedidoId]);
 
             $baixas[] = ['insumo' => $fi['insumo_nome'], 'consumo' => $consumo];
+
+            // Verificar se atingiu ROP e disparar alerta via webhook
+            try {
+                $iRow = $db->prepare("SELECT estoque_atual, rop, estoque_minimo, unidade FROM totem_insumos WHERE id = ?");
+                $iRow->execute([$fi['insumo_id']]);
+                $iData = $iRow->fetch();
+                if ($iData) {
+                    $atual = (float)$iData['estoque_atual'];
+                    $rop   = (float)($iData['rop'] ?: $iData['estoque_minimo']);
+                    if ($rop > 0 && $atual <= $rop) {
+                        alertarEstoqueBaixo($db, $fi['insumo_nome'], $atual, $iData['unidade']);
+                    }
+                }
+            } catch (Throwable) {}
         }
     }
 

@@ -369,8 +369,26 @@ tickClock();
 setInterval(tickClock, 30000);
 
 // ── Boot ───────────────────────────────────────────────────────────────
-// Initial load via REST, then switch to SSE
 (async () => {
+  // Carregar configs do sistema (som e intervalo de reconexão)
+  try {
+    const cfgRes = await fetch('../api/configuracoes.php').then(r => r.json()).catch(() => null);
+    if (cfgRes?.success && cfgRes.data) {
+      const kdsRefresh = parseInt(cfgRes.data.kds_refresh_segundos || '5');
+      if (kdsRefresh > 0) reconnectMs = kdsRefresh * 1000;
+
+      // Auto-habilitar som se configurado (kds_som != '0')
+      const kdsSom = cfgRes.data.kds_som || '0';
+      if (kdsSom !== '0') {
+        soundEnabled = true;
+        const btn = document.getElementById('sound-btn');
+        if (btn) btn.textContent = '🔔';
+        // Inicializar AudioContext após interação do usuário (será criado no primeiro beep)
+      }
+    }
+  } catch(_) {}
+
+  // Carregar pedidos iniciais via REST, depois SSE
   try {
     const res = await fetch(ADMIN_API + 'pedidos.php?status=ativos', {
       headers: { 'X-CSRF-Token': CSRF_TOKEN }

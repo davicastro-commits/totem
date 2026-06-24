@@ -35,6 +35,16 @@ function acumularPontosPorPedido(PDO $db, int $pedidoId): int
 
         if (!$cfg) $cfg = ['pontos_por_real' => 1.0, 'real_por_ponto' => 0.05, 'validade_dias' => 365];
 
+        // Verificar se programa de fidelidade está ativo
+        $fidAtiva = $db->query("SELECT valor FROM totem_configuracoes WHERE chave='fidelidade_ativa'")->fetchColumn();
+        if ($fidAtiva === '0') return 0;
+
+        // Ler pontos_por_real da totem_configuracoes se disponível (sobrescreve totem_pontos_config)
+        $ptsRealCfg = $db->query("SELECT valor FROM totem_configuracoes WHERE chave='pontos_por_real'")->fetchColumn();
+        if ($ptsRealCfg !== false) $cfg['pontos_por_real'] = (float)$ptsRealCfg;
+        $validadeCfg = $db->query("SELECT valor FROM totem_configuracoes WHERE chave='validade_dias'")->fetchColumn();
+        if ($validadeCfg !== false) $cfg['validade_dias'] = (int)$validadeCfg;
+
         $pontosGanhos = (int)floor($total * (float)$cfg['pontos_por_real']);
         if ($pontosGanhos <= 0) return 0;
 

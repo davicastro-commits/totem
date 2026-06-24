@@ -3,14 +3,28 @@
 const Totem = (() => {
 
   let cfg = {
-    loja_nome:               'Café Comunhão',
-    loja_cnpj:               '',
-    loja_endereco:           '',
-    loja_telefone:           '',
-    loja_url:                '',
-    totem_idle_segundos:     '120',
-    totem_confirmar_segundos:'30',
+    loja_nome:                    'Café Comunhão',
+    loja_cnpj:                    '',
+    loja_endereco:                '',
+    loja_telefone:                '',
+    loja_url:                     '',
+    totem_idle_segundos:          '120',
+    totem_confirmar_segundos:     '30',
+    totem_mensagem_boasvindas:    '',
+    totem_max_itens_pedido:       '20',
+    totem_aviso_fechamento_min:   '10',
+    totem_autoreload_minutos:     '0',
+    pagamento_pix_ativo:          '1',
+    pagamento_credito_ativo:      '1',
+    pagamento_debito_ativo:       '1',
+    pagamento_dinheiro_ativo:     '1',
+    taxa_servico_ativa:           '0',
+    taxa_servico_percentual:      '0',
   };
+
+  let _avisoFechamentoTimer = null;
+  let _autoreloadTimer      = null;
+  const _removeCooldown     = new Map(); // id → timestamp de quando foi zerado
 
   let s = {
     screen:      'welcome',
@@ -59,7 +73,12 @@ const Totem = (() => {
 
   async function loadConfig() {
     try {
-      const r = await api('configuracoes.php');
+      // Cache-bust para garantir que o browser nunca sirva versão antiga
+      const base = window.location.pathname.replace(/\/[^/]*$/, '/');
+      const r = await fetch(base + 'api/configuracoes.php?_=' + Date.now(), {
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+      }).then(res => res.json());
       if (r.success && r.data) {
         cfg = { ...cfg, ...r.data };
         IDLE_MS      = parseInt(cfg.totem_idle_segundos || '120') * 1000;
@@ -68,10 +87,63 @@ const Totem = (() => {
     } catch (_) {}
   }
 
+  // ── Heartbeat único — 30s ────────────────────────────────────────────
+  // Gerencia: abertura/fechamento, alerta de fechamento, relógio fechado, config
+  let _hbTick = 0;
+  setInterval(async () => {
+    _hbTick++;
+
+    // Recarregar config a cada 2 min (4 ticks de 30s)
+    if (_hbTick % 4 === 0) await loadConfig();
+
+    const aberto  = isStoreOpen();
+    const avisMin = parseInt(cfg.totem_aviso_fechamento_min || '10');
+
+    // ── Abertura / Fechamento automático ────────────────────────────
+    if (aberto && s.screen === 'fechado') {
+      go('welcome');
+    } else if (!aberto && s.screen === 'welcome') {
+      go('fechado');
+    }
+
+    // ── Relógio na tela fechada ──────────────────────────────────────
+    if (s.screen === 'fechado') {
+      const el = document.getElementById('clock-fechado');
+      if (el) el.textContent = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+    }
+
+    // ── Alerta de fechamento ─────────────────────────────────────────
+    // Mostra SEMPRE que há horário de fechamento configurado e a loja está aberta
+    const minFecha   = minutosParaFechar();
+    const existePill = document.getElementById('aviso-fechamento');
+    // Mostrar apenas dentro da janela de aviso (≤ avisMin minutos para fechar)
+    const dentroJanela = avisMin > 0 && minFecha > 0 && minFecha <= avisMin;
+
+    if (aberto && dentroJanela && s.screen !== 'fechado') {
+      if (!existePill) {
+        showAvisoFechamento(minFecha);
+      } else {
+        const cd = document.getElementById('aviso-countdown');
+        if (cd) cd.textContent = minFecha;
+      }
+    } else if (existePill) {
+      existePill.remove();
+    }
+
+    // ── Auto-recarga ────────────────────────────────────────────────
+    agendarAutoreload();
+  }, 30000);
+
   function cartCount() { return s.cart.reduce((n, i) => n + i.quantidade, 0); }
   function cartTotal() { return s.cart.reduce((n, i) => n + i.preco * i.quantidade, 0); }
 
   function addItem(prod) {
+    const maxItens = parseInt(cfg.totem_max_itens_pedido || '20') || 20;
+    if (cartCount() >= maxItens) {
+      const el = document.getElementById('cart-bar-total');
+      if (el) { el.textContent = 'Máx. ' + maxItens + ' itens por pedido'; setTimeout(() => updateCartBar(), 2000); }
+      return;
+    }
     const ex = s.cart.find(i => i.id === prod.id);
     if (ex) ex.quantidade++;
     else s.cart.push({ ...prod, quantidade: 1, obs: '' });
@@ -112,9 +184,181 @@ const Totem = (() => {
     if (fInfo) fInfo.textContent = cnt > 0 ? cnt + ' ' + (cnt === 1 ? 'item' : 'itens') + ' · ' + fmt(tot) : 'Seu carrinho está vazio';
   }
 
+  // ── Horário de funcionamento ─────────────────────────────────────────
+  function isStoreOpen() {
+    const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+    const dia  = dias[new Date().getDay()];
+
+    // Se nenhum horário foi configurado, sempre aberto
+    if (!cfg['horario_seg_abertura'] && !cfg['horario_dom_abertura']) return true;
+
+    const ativo     = cfg['horario_'+dia+'_ativo'];
+    if (ativo === '0') return false; // dia desabilitado
+
+    const abertura  = cfg['horario_'+dia+'_abertura']  || '00:00';
+    const fechamento= cfg['horario_'+dia+'_fechamento'] || '23:59';
+
+    const now   = new Date();
+    const nowM  = now.getHours() * 60 + now.getMinutes();
+    const [hA, mA] = abertura.split(':').map(Number);
+    const [hF, mF] = fechamento.split(':').map(Number);
+
+    return nowM >= (hA * 60 + mA) && nowM < (hF * 60 + mF);
+  }
+
+  function proximaAbertura() {
+    const dias   = ['dom','seg','ter','qua','qui','sex','sab'];
+    const nomes  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+    const hoje   = new Date().getDay();
+    for (let i = 1; i <= 7; i++) {
+      const idx = (hoje + i) % 7;
+      const d   = dias[idx];
+      if (cfg['horario_'+d+'_ativo'] !== '0') {
+        const ab = cfg['horario_'+d+'_abertura'] || '08:00';
+        return (i === 1 ? 'Amanhã' : nomes[idx]) + ' às ' + ab;
+      }
+    }
+    return null;
+  }
+
   function resetIdle() {
     clearTimeout(idleTimer);
-    if (s.screen !== 'welcome') idleTimer = setTimeout(() => { s.autoPrint = false; go('welcome'); }, IDLE_MS);
+    if (s.screen !== 'welcome' && s.screen !== 'fechado')
+      idleTimer = setTimeout(() => { s.autoPrint = false; goWelcomeOrFechado(); }, IDLE_MS);
+  }
+
+  function goWelcomeOrFechado() {
+    go(isStoreOpen() ? 'welcome' : 'fechado');
+  }
+
+  // ── Aviso de fechamento próximo ──────────────────────────────────────
+  // Retorna minutos até fechar (0 se já fechou ou não configurado)
+  function minutosParaFechar() {
+    const dias = ['dom','seg','ter','qua','qui','sex','sab'];
+    const dia  = dias[new Date().getDay()];
+    const fech = cfg['horario_'+dia+'_fechamento'];
+    if (!fech || fech === '23:59') return 999; // sem restrição
+    const [hF, mF] = fech.split(':').map(Number);
+    const now = new Date();
+    const fechTs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hF, mF, 0);
+    return Math.ceil((fechTs - now) / 60000);
+  }
+
+  // Placeholder vazio — a lógica ficou no heartbeat
+  function agendarAvisoFechamento() {}
+
+  function showAvisoFechamento(minutos) {
+    if (s.screen === 'fechado' || s.screen === 'processing') return;
+    if (document.getElementById('aviso-fechamento')) return; // já exibido
+
+    // Injetar CSS
+    if (!document.getElementById('aviso-css')) {
+      const st = document.createElement('style');
+      st.id = 'aviso-css';
+      st.textContent = `
+        #aviso-fechamento {
+          position:fixed; bottom:24px; z-index:9999;
+          display:flex; align-items:center; gap:8px;
+          background:rgba(18,20,30,.92); backdrop-filter:blur(16px);
+          border:1px solid rgba(255,255,255,.08);
+          border-radius:999px; padding:8px 16px 8px 12px;
+          box-shadow:0 4px 20px rgba(0,0,0,.5);
+          user-select:none; white-space:nowrap;
+          transition:border-color .4s, box-shadow .4s;
+          animation:avisoIn .45s cubic-bezier(.34,1.4,.64,1) forwards;
+        }
+        /* Modo urgente — dentro da janela de aviso */
+        #aviso-fechamento.urgente {
+          border-color:rgba(255,85,0,.45);
+          box-shadow:0 4px 24px rgba(0,0,0,.6), 0 0 0 1px rgba(255,85,0,.15);
+        }
+        #aviso-fechamento.urgente #aviso-dot { animation:dotPulse 1.2s ease-in-out infinite; }
+        #aviso-fechamento.urgente #aviso-label { color:#ff5500; }
+        @keyframes avisoIn {
+          from { transform:scale(.8); opacity:0; }
+          to   { transform:scale(1);  opacity:1; }
+        }
+        @keyframes avisoOut {
+          to { transform:scale(.8); opacity:0; }
+        }
+        #aviso-fechamento.saindo { animation:avisoOut .3s ease forwards; }
+        #aviso-dot {
+          width:8px; height:8px; flex-shrink:0; border-radius:50%;
+          background:#ff5500;
+          animation:dotPulse 2s ease-in-out infinite;
+        }
+        @keyframes dotPulse {
+          0%,100% { box-shadow:0 0 0 0 rgba(255,85,0,.5); }
+          60%     { box-shadow:0 0 0 6px rgba(255,85,0,0); }
+        }
+        #aviso-label {
+          font-size:10px; font-weight:700; color:#ff7733;
+          letter-spacing:.7px; text-transform:uppercase;
+          max-width:80px; opacity:1;
+          transition:max-width .35s ease, opacity .25s ease, margin .35s ease;
+          overflow:hidden;
+        }
+        #aviso-time {
+          font-size:13px; font-weight:800; color:#f0f2f8; white-space:nowrap;
+        }
+        #aviso-close-btn {
+          max-width:22px; width:22px; height:22px; flex-shrink:0;
+          border-radius:50%; border:none; background:rgba(255,255,255,.08);
+          color:#6b7280; font-size:11px; cursor:pointer;
+          display:flex; align-items:center; justify-content:center;
+          transition:max-width .35s, opacity .25s, margin .35s, background .15s;
+          font-family:inherit; overflow:hidden;
+        }
+        #aviso-close-btn:hover { background:rgba(239,68,68,.2); color:#f87171; }
+      `;
+      document.head.appendChild(st);
+    }
+
+    const pill = document.createElement('div');
+    pill.id = 'aviso-fechamento';
+    // Pegar horário de fechamento para exibir
+    const _dias = ['dom','seg','ter','qua','qui','sex','sab'];
+    const _dia  = _dias[new Date().getDay()];
+    const _hrFecha = cfg['horario_'+_dia+'_fechamento'] || '';
+
+    pill.innerHTML = `
+      <div id="aviso-dot"></div>
+      <span id="aviso-label">Fecha</span>
+      <span id="aviso-time">${_hrFecha ? 'às ' + _hrFecha + ' · em ' : 'em '}<span id="aviso-countdown">${minutos}</span> min</span>
+    `;
+    // Posicionar via JS relativo ao #app para não ser destruído pelo innerHTML
+    const _posicionarPill = () => {
+      const rect = app.getBoundingClientRect();
+      pill.style.left   = (rect.left + 24) + 'px';
+      pill.style.bottom = '24px';
+    };
+    document.body.appendChild(pill);
+    _posicionarPill();
+    // Reposicionar se janela redimensionar
+    window.addEventListener('resize', _posicionarPill);
+
+    // Sem colapso — pill fica visível até o fechamento
+
+    // O heartbeat cuida de atualizar o countdown e remover quando fechar
+  }
+
+  // ── Auto-recarga da página ───────────────────────────────────────────
+  function agendarAutoreload() {
+    clearTimeout(_autoreloadTimer);
+    const min = parseInt(cfg.totem_autoreload_minutos || '0');
+    if (!min) return;
+
+    _autoreloadTimer = setTimeout(() => {
+      // Só recarregar se o totem estiver na tela inicial (não no meio de um pedido)
+      if (s.screen === 'welcome' || s.screen === 'fechado') {
+        location.reload();
+      } else {
+        // Se estiver em uso, reagendar para 2 minutos depois
+        cfg.totem_autoreload_minutos = '2';
+        agendarAutoreload();
+        cfg.totem_autoreload_minutos = String(min);
+      }
+    }, min * 60000);
   }
 
   function go(screen, patch) {
@@ -130,6 +374,7 @@ const Totem = (() => {
 
   function render() {
     switch (s.screen) {
+      case 'fechado':    renderFechado();    break;
       case 'welcome':    renderWelcome();    break;
       case 'tipo':       renderTipo();       break;
       case 'menu':       renderMenu();       break;
@@ -152,6 +397,64 @@ const Totem = (() => {
     return Array.from({length: n}, () => '<div class="skeleton-card"></div>').join('');
   }
 
+  // --- FECHADO ---
+  function renderFechado() {
+    const prox = proximaAbertura();
+    const dias   = ['dom','seg','ter','qua','qui','sex','sab'];
+    const nomes  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    const hoje   = new Date().getDay();
+    const loja   = esc(cfg.loja_nome || 'Café Comunhão');
+
+    const horariosHtml = dias.map((d, idx) => {
+      const ativo    = cfg['horario_'+d+'_ativo'] !== '0';
+      const abertura = cfg['horario_'+d+'_abertura']  || '—';
+      const fech     = cfg['horario_'+d+'_fechamento'] || '—';
+      const isHoje   = idx === hoje;
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;' +
+        'padding:10px 12px;border-radius:10px;min-width:60px;' +
+        (isHoje ? 'background:rgba(255,85,0,.15);border:1px solid rgba(255,85,0,.3)' : 'background:rgba(255,255,255,.04)') + '">' +
+        '<span style="font-size:11px;font-weight:700;color:' + (isHoje ? '#ff7733' : '#6b7280') + '">' + nomes[idx] + '</span>' +
+        (ativo
+          ? '<span style="font-size:12px;color:#f0f2f8;font-weight:600">' + abertura + '</span>' +
+            '<span style="font-size:10px;color:#6b7280">até ' + fech + '</span>'
+          : '<span style="font-size:12px;color:#4b5563">Fechado</span>'
+        ) +
+      '</div>';
+    }).join('');
+
+    app.innerHTML =
+      '<div class="screen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+        'min-height:100vh;background:radial-gradient(ellipse at 50% 40%,rgba(15,23,42,.9) 0%,#0a0c14 100%);' +
+        'text-align:center;padding:40px;gap:0">' +
+
+        // Ícone animado
+        '<div style="font-size:72px;margin-bottom:16px;filter:grayscale(.4)">🔒</div>' +
+
+        // Nome da loja
+        '<h1 style="font-size:clamp(28px,5vw,48px);font-weight:900;color:#f0f2f8;margin-bottom:8px">' + loja + '</h1>' +
+
+        // Mensagem principal
+        '<p style="font-size:clamp(18px,3vw,26px);font-weight:700;color:#ff5500;margin-bottom:6px">Estamos fechados agora</p>' +
+        '<p style="font-size:14px;color:#9ca3af;margin-bottom:32px">' +
+          (prox ? 'Próxima abertura: <strong style="color:#f0f2f8">' + prox + '</strong>' : 'Em breve!') +
+        '</p>' +
+
+        // Horários da semana
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:40px">' +
+          horariosHtml +
+        '</div>' +
+
+        // Relógio
+        '<div id="clock-fechado" style="font-size:clamp(36px,6vw,64px);font-weight:900;color:#374151;' +
+          'letter-spacing:4px;font-variant-numeric:tabular-nums"></div>' +
+
+      '</div>';
+
+    // Relógio inicial (o heartbeat atualiza a cada 30s)
+    const elClock = document.getElementById('clock-fechado');
+    if (elClock) elClock.textContent = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+  }
+
   // --- WELCOME ---
   function renderWelcome() {
     const nomeLoja = esc(cfg.loja_nome);
@@ -165,7 +468,7 @@ const Totem = (() => {
               : '<svg width="80" height="80" viewBox="0 0 80 80" fill="none"><circle cx="40" cy="40" r="40" fill="rgba(255,85,0,0.15)"/><text x="40" y="54" font-size="40" text-anchor="middle" font-family="serif">&#x2615;</text></svg>') +
             '</div>' +
             '<h1 class="logo-name">' + nomeLoja + '</h1>' +
-            '<p class="logo-sub">Peça, pague e aguarde seu número</p>' +
+            '<p class="logo-sub">' + (cfg.totem_mensagem_boasvindas || 'Peça, pague e aguarde seu número') + '</p>' +
           '</div>' +
           '<button class="btn-start" data-action="go-tipo">Toque para começar</button>' +
           '<div class="welcome-clock" id="clock"></div>' +
@@ -202,9 +505,10 @@ const Totem = (() => {
 
   // --- MENU ---
   function renderMenu() {
-    const nomeLoja = esc(cfg.loja_nome);
+    const nomeLoja = esc(cfg.loja_nome || 'Cardápio');
     app.innerHTML =
       '<div class="screen menu">' +
+        // Header full-width
         '<header class="menu-header">' +
           '<div class="header-brand"><span class="brand-name">' + nomeLoja + '</span></div>' +
           '<button class="cart-btn" id="btn-cart" data-action="go-cart" disabled>' +
@@ -212,8 +516,11 @@ const Totem = (() => {
             '<span id="cart-total">' + fmt(0) + '</span>' +
           '</button>' +
         '</header>' +
-        '<nav class="cats-nav" id="cats-nav"><div style="display:flex;gap:10px;padding:0 4px">' + skeletonCats() + '</div></nav>' +
+        // Sidebar de categorias (esquerda, vertical)
+        '<nav class="cats-nav" id="cats-nav">' + skeletonCats() + '</nav>' +
+        // Área de produtos (direita)
         '<div class="products-area" id="products-area"><div class="loading-placeholder">' + skeletonCards(6) + '</div></div>' +
+        // Footer full-width
         '<footer class="menu-footer">' +
           '<button class="btn-finalizar" id="btn-cart-footer" data-action="go-cart" disabled>' +
             '<span>🛒</span><span id="footer-cart-info">Seu carrinho está vazio</span><span class="btn-finalizar-arrow">→</span>' +
@@ -224,8 +531,8 @@ const Totem = (() => {
   }
 
   function skeletonCats() {
-    return Array.from({length:4}, () =>
-      '<div style="height:44px;width:100px;background:var(--c-card);border-radius:999px;flex-shrink:0;animation:shimmer 1.4s infinite"></div>'
+    return Array.from({length: 5}, () =>
+      '<div style="height:44px;background:var(--card2);border-radius:12px;animation:shimmer 1.4s infinite"></div>'
     ).join('');
   }
 
@@ -243,9 +550,10 @@ const Totem = (() => {
   function renderCats() {
     const nav = document.getElementById('cats-nav');
     if (!nav) return;
+    // Botões verticais na sidebar
     nav.innerHTML = s.categorias.map(c =>
       '<button class="cat-pill' + (c.id === s.categoriaId ? ' active' : '') + '" data-action="select-cat" data-id="' + c.id + '">' +
-        '<span class="cat-icon">' + c.icone + '</span>' +
+        '<span class="cat-icon">' + (c.icone || '🍽️') + '</span>' +
         '<span class="cat-name">' + esc(c.nome) + '</span>' +
       '</button>'
     ).join('');
@@ -258,10 +566,10 @@ const Totem = (() => {
       const r = await api('produtos.php?categoria_id=' + catId);
       if (r.success) s.produtos[catId] = r.data;
     }
-    renderProdutos(catId);
+    renderProdutos(catId, true); // animar ao trocar de categoria
   }
 
-  function renderProdutos(catId) {
+  function renderProdutos(catId, animate) {
     const area = document.getElementById('products-area');
     if (!area) return;
     const list = s.produtos[catId] || [];
@@ -271,7 +579,7 @@ const Totem = (() => {
       return;
     }
 
-    area.innerHTML = '<div class="products-grid">' + list.map(function(p) {
+    area.innerHTML = '<div class="products-grid' + (animate ? ' animate-in' : '') + '">' + list.map(function(p) {
       const inCart = s.cart.find(i => i.id === p.id);
       const qty    = inCart ? inCart.quantidade : 0;
       const icon   = catIcon(catId);
@@ -289,28 +597,30 @@ const Totem = (() => {
           '<div class="product-img" style="background:' + cardColor(p.id) + ';opacity:.5">' + imgTag + '</div>' +
           '<div class="product-info">' +
             '<h3 class="product-name">' + esc(p.nome) + '</h3>' +
-            '<span style="color:var(--c-red,#ef4444);font-size:12px;font-weight:600">Esgotado</span>' +
+            '<span style="color:var(--red,#ef4444);font-size:12px;font-weight:600">Esgotado</span>' +
           '</div>' +
         '</div>';
       }
 
+      const addAttrs  = 'data-action="add-item" data-id="' + p.id + '" data-nome="' + esc(p.nome) + '" data-preco="' + p.preco + '" data-cat="' + catId + '" data-imagem="' + esc(p.imagem||'') + '"';
+      const viewAttrs = 'data-action="view-product" data-id="' + p.id + '" data-cat="' + catId + '"';
+
       return '<div class="product-card' + (p.destaque ? ' destaque' : '') + '" data-id="' + p.id + '">' +
         (p.destaque ? '<div class="badge-destaque">Destaque</div>' : '') +
         (estoquePoucas ? '<div class="badge-estoque">Últimas ' + p.estoque_qtd + '</div>' : '') +
-        '<div class="product-img" style="background:' + cardColor(p.id) + '">' + imgTag + '</div>' +
+        // Imagem abre detalhes; + adiciona ao carrinho
+        '<div class="product-img" style="background:' + cardColor(p.id) + '" ' + viewAttrs + '>' + imgTag + '</div>' +
         '<div class="product-info">' +
-          '<h3 class="product-name">' + esc(p.nome) + '</h3>' +
+          '<h3 class="product-name" ' + viewAttrs + '>' + esc(p.nome) + '</h3>' +
           (p.descricao ? '<p class="product-desc">' + esc(p.descricao) + '</p>' : '') +
           '<div class="product-footer">' +
             '<span class="product-price">' + fmt(p.preco) + '</span>' +
             '<div class="qty-controls' + (qty > 0 ? ' visible' : '') + '">' +
               '<button class="qty-btn" data-action="remove-item" data-id="' + p.id + '" data-cat="' + catId + '">−</button>' +
               '<span class="qty-num">' + qty + '</span>' +
-              '<button class="qty-btn add" data-action="add-item" data-id="' + p.id + '" data-nome="' + esc(p.nome) + '" data-preco="' + p.preco + '" data-cat="' + catId + '" data-imagem="' + esc(p.imagem||'') + '">+</button>' +
+              '<button class="qty-btn add" ' + addAttrs + '>+</button>' +
             '</div>' +
-            (qty === 0
-              ? '<button class="btn-add" data-action="add-item" data-id="' + p.id + '" data-nome="' + esc(p.nome) + '" data-preco="' + p.preco + '" data-cat="' + catId + '" data-imagem="' + esc(p.imagem||'') + '">Adicionar +</button>'
-              : '') +
+            '<button class="btn-add' + (qty > 0 ? ' hidden' : '') + '" ' + addAttrs + '>+</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -390,18 +700,29 @@ const Totem = (() => {
 
   // --- PAYMENT ---
   function renderPayment() {
-    const methods = [
-      { id:'pix',      label:'PIX',     icon:'📱', desc:'Rápido, gratuito e instantâneo' },
-      { id:'credito',  label:'Crédito', icon:'💳', desc:'Visa, Mastercard, Elo' },
-      { id:'debito',   label:'Débito',  icon:'💳', desc:'Débito em conta' },
-      { id:'dinheiro', label:'Dinheiro', icon:'💵', desc:'Pague no caixa' },
+    const allMethods = [
+      { id:'pix',      label:'PIX',      icon:'📱', desc:'Rápido, gratuito e instantâneo', cfgKey:'pagamento_pix_ativo' },
+      { id:'credito',  label:'Crédito',  icon:'💳', desc:'Visa, Mastercard, Elo',          cfgKey:'pagamento_credito_ativo' },
+      { id:'debito',   label:'Débito',   icon:'💳', desc:'Débito em conta',                 cfgKey:'pagamento_debito_ativo' },
+      { id:'dinheiro', label:'Dinheiro', icon:'💵', desc:'Pague no caixa',                  cfgKey:'pagamento_dinheiro_ativo' },
     ];
+    // Filtrar apenas métodos habilitados nas configurações
+    const methods = allMethods.filter(m => cfg[m.cfgKey] !== '0');
 
     app.innerHTML =
       '<div class="screen payment">' +
         '<div class="screen-header"><button class="btn-back" data-action="go-cpf">← Voltar</button><h2>Forma de pagamento</h2></div>' +
         '<div class="payment-body">' +
-          '<div class="payment-total"><span>Total a pagar</span><strong>' + fmt(cartTotal()) + '</strong></div>' +
+          (function() {
+            const sub  = cartTotal();
+            const taxa = cfg.taxa_servico_ativa === '1' ? sub * parseFloat(cfg.taxa_servico_percentual||0) / 100 : 0;
+            const tot  = sub + taxa;
+            return '<div class="payment-total">' +
+              '<span>Subtotal</span><strong>' + fmt(sub) + '</strong>' +
+              (taxa > 0 ? '<span style="font-size:13px;color:#9ca3af">Taxa de serviço (' + cfg.taxa_servico_percentual + '%)</span><strong style="font-size:15px">' + fmt(taxa) + '</strong>' : '') +
+              '<span style="font-weight:800">Total a pagar</span><strong style="font-size:22px">' + fmt(tot) + '</strong>' +
+            '</div>';
+          })() +
           '<div class="payment-methods">' +
             methods.map(m =>
               '<button class="payment-method' + (s.pagamento===m.id?' selected':'') + '" data-action="select-payment" data-method="' + m.id + '">' +
@@ -573,7 +894,7 @@ const Totem = (() => {
           pixBlock +
           '<div class="confirmed-details">' +
             '<div class="detail-row"><span>' + tpLbl + '</span><span>' + pgLbl + '</span></div>' +
-            '<div class="detail-row"><span>' + p.criado_em + '</span>' + (p.cpf ? '<span>CPF: ' + p.cpf + '</span>' : '<span style="color:var(--c-text-3)">Sem CPF</span>') + '</div>' +
+            '<div class="detail-row"><span>' + p.criado_em + '</span>' + (p.cpf ? '<span>CPF: ' + p.cpf + '</span>' : '<span style="color:var(--t3)">Sem CPF</span>') + '</div>' +
             '<div class="detail-row total-row"><strong>Total pago</strong><strong>' + fmt(p.total) + '</strong></div>' +
           '</div>' +
           '<p class="wait-msg">Aguarde ser chamado pelo número <strong>#' + p.numero + '</strong></p>' +
@@ -596,7 +917,7 @@ const Totem = (() => {
       secs--;
       const el = document.getElementById('cdown');
       if (el) el.textContent = secs + 's';
-      if (secs <= 0) { clearInterval(countdownTimer); go('welcome'); }
+      if (secs <= 0) { clearInterval(countdownTimer); goWelcomeOrFechado(); }
     }, 1000);
   }
 
@@ -609,7 +930,7 @@ const Totem = (() => {
       const res = await fetch('api/pix.php?total=' + encodeURIComponent(pedido.total) + '&ref=' + encodeURIComponent(ref));
       const data = await res.json();
       if (!data.success) {
-        container.innerHTML = '<p style="color:var(--c-text-3);font-size:13px">' + (data.error || 'PIX não configurado') + '</p>';
+        container.innerHTML = '<p style="color:var(--t3);font-size:13px">' + (data.error || 'PIX não configurado') + '</p>';
         return;
       }
       container.innerHTML = '';
@@ -625,10 +946,10 @@ const Totem = (() => {
         });
       } else {
         // Fallback: show raw payload (rare, for debugging)
-        container.innerHTML = '<p style="font-size:9px;word-break:break-all;color:var(--c-text-3)">' + data.payload + '</p>';
+        container.innerHTML = '<p style="font-size:9px;word-break:break-all;color:var(--t3)">' + data.payload + '</p>';
       }
     } catch (err) {
-      if (container) container.innerHTML = '<p style="color:var(--c-text-3);font-size:13px">Erro ao gerar QR Code</p>';
+      if (container) container.innerHTML = '<p style="color:var(--t3);font-size:13px">Erro ao gerar QR Code</p>';
     }
   }
 
@@ -750,11 +1071,82 @@ const Totem = (() => {
     setTimeout(() => receipt.classList.add('hidden'), 500);
   }
 
+  // --- DETALHE DO PRODUTO ---
+  async function openProductDetail(prod, catId) {
+    if (document.getElementById('modal-produto')) return;
+
+    const icon = catIcon(catId);
+    const imgTag = prod.imagem
+      ? '<img src="' + esc(prod.imagem) + '" alt="' + esc(prod.nome) + '" onerror="this.outerHTML=\'<span class=\\\'product-emoji\\\'>' + icon + '</span>\'">'
+      : '<span class="product-emoji">' + icon + '</span>';
+
+    const inCart = s.cart.find(i => i.id === prod.id);
+    const qty    = inCart ? inCart.quantidade : 0;
+
+    const modal = document.createElement('div');
+    modal.id = 'modal-produto';
+    modal.innerHTML =
+      '<div class="modal-produto-sheet">' +
+        '<div class="modal-produto-img" style="background:' + cardColor(prod.id) + '">' + imgTag + '</div>' +
+        '<div class="modal-produto-body">' +
+          '<div>' +
+            '<div class="modal-produto-titulo">' + esc(prod.nome) + '</div>' +
+            '<div class="modal-produto-preco">' + fmt(prod.preco) + '</div>' +
+          '</div>' +
+          (prod.descricao ? '<div class="modal-produto-desc">' + esc(prod.descricao) + '</div>' : '') +
+          '<div class="modal-produto-ingredientes" id="mp-ing">' +
+            '<div class="modal-prod-ing-title">Ingredientes</div>' +
+            '<div class="modal-prod-ing-list" id="mp-ing-list">' +
+              '<div style="color:var(--t3);font-size:13px">Carregando...</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="modal-produto-footer">' +
+          '<button class="modal-btn-fechar" id="mp-fechar">← Voltar</button>' +
+          '<button class="modal-btn-adicionar" id="mp-adicionar">' +
+            (qty > 0 ? '✓ No carrinho (' + qty + ')  +' : '+ Adicionar ao carrinho') +
+          '</button>' +
+        '</div>' +
+      '</div>';
+
+    app.appendChild(modal);
+
+    // Fechar ao clicar no fundo ou no botão voltar
+    const fechar = () => { modal.style.animation = 'modalBgIn .2s ease reverse both'; setTimeout(() => modal.remove(), 200); };
+    modal.addEventListener('click', e => { if (e.target === modal) fechar(); });
+    document.getElementById('mp-fechar').addEventListener('click', fechar);
+
+    // Adicionar ao carrinho
+    document.getElementById('mp-adicionar').addEventListener('click', () => {
+      addItem({ id: prod.id, nome: prod.nome, preco: prod.preco, icone: icon, imagem: prod.imagem || null });
+      updateCartBar();
+      renderProdutos(catId, false);
+      fechar();
+    });
+
+    // Buscar ficha técnica (ingredientes)
+    try {
+      const r = await api('estoque.php?action=ficha&produto_id=' + prod.id);
+      const ingList = document.getElementById('mp-ing-list');
+      if (!ingList) return;
+      if (r.success && r.data && r.data.length) {
+        ingList.innerHTML = r.data.map(f =>
+          '<div class="modal-prod-ing-item">' +
+            '<span class="modal-prod-ing-nome">' + esc(f.insumo_nome) + '</span>' +
+            '<span class="modal-prod-ing-qty">' + parseFloat(f.quantidade).toFixed(3) + ' ' + esc(f.unidade) + '</span>' +
+          '</div>'
+        ).join('');
+      } else {
+        document.getElementById('mp-ing')?.remove(); // sem ficha, esconder seção
+      }
+    } catch { document.getElementById('mp-ing')?.remove(); }
+  }
+
   // --- ACTIONS ---
   function handle(action, ds) {
     resetIdle();
     switch (action) {
-      case 'go-welcome':      s.autoPrint = false; go('welcome'); break;
+      case 'go-welcome':      s.autoPrint = false; goWelcomeOrFechado(); break;
       case 'go-tipo':         go('tipo'); break;
       case 'go-menu':         go('menu'); break;
       case 'go-cart':         if (cartCount() > 0) go('cart'); break;
@@ -766,15 +1158,36 @@ const Totem = (() => {
         renderCats();
         loadProdutos(s.categoriaId);
         break;
-      case 'add-item':
-        addItem({ id: parseInt(ds.id), nome: ds.nome, preco: parseFloat(ds.preco), icone: catIcon(parseInt(ds.cat)), imagem: ds.imagem || null });
+      case 'view-product': {
+        const vpId  = parseInt(ds.id);
+        const vpCat = parseInt(ds.cat);
+        const vprod = (s.produtos[vpCat] || []).find(p => p.id === vpId);
+        if (vprod) openProductDetail(vprod, vpCat);
+        break;
+      }
+      case 'add-item': {
+        const addId = parseInt(ds.id);
+        const cooledAt = _removeCooldown.get(addId);
+        // Ignorar clique de add se o produto foi zerado há menos de 3s
+        if (cooledAt && Date.now() - cooledAt < 1000) break;
+        _removeCooldown.delete(addId);
+        addItem({ id: addId, nome: ds.nome, preco: parseFloat(ds.preco), icone: catIcon(parseInt(ds.cat)), imagem: ds.imagem || null });
         renderProdutos(s.categoriaId);
         break;
-      case 'remove-item':
-        changeQty(parseInt(ds.id), -1);
+      }
+      case 'remove-item': {
+        const remId = parseInt(ds.id);
+        const before = s.cart.find(i => i.id === remId);
+        changeQty(remId, -1);
+        // Se o item acabou de ser zerado, iniciar cooldown de 3s
+        if (before && before.quantidade === 1) {
+          _removeCooldown.set(remId, Date.now());
+          setTimeout(() => _removeCooldown.delete(remId), 1000);
+        }
         renderProdutos(s.categoriaId);
         updateCartBar();
         break;
+      }
       case 'cart-add':
         addItem({ id: parseInt(ds.id), nome: ds.nome, preco: parseFloat(ds.preco), icone: ds.icone, imagem: ds.imagem || null });
         renderCart();
@@ -800,13 +1213,21 @@ const Totem = (() => {
 
   async function init() {
     await loadConfig();
+
     document.addEventListener('click', e => {
+      // Tela fechada não responde a nenhum toque
+      if (s.screen === 'fechado') return;
       const el = e.target.closest('[data-action]');
       if (!el) return;
       handle(el.dataset.action, el.dataset);
     });
     document.addEventListener('touchstart', resetIdle, { passive: true });
-    go('welcome');
+
+    // Verificar horário e exibir tela correta
+    goWelcomeOrFechado();
+
+    // O heartbeat (definido acima) cuida de tudo mais
+    agendarAutoreload();
   }
 
   return { init };

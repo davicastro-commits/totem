@@ -470,6 +470,45 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
 .est-action-big-icon{font-size:24px;flex-shrink:0}
 .est-action-big-title{font-size:13px;font-weight:700;color:var(--text)}
 .est-action-big-sub{font-size:10px;color:var(--text3);margin-top:2px}
+
+/* ── Config panels ───────────────────────────────────────────────────────── */
+.cfg-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:12px}
+.cfg-header-left{display:flex;align-items:center;gap:14px}
+.cfg-header-icon{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.cfg-title{font-size:20px;font-weight:800}
+.cfg-sub{font-size:13px;color:var(--text3);margin-top:2px}
+.cfg-section{margin-bottom:20px}
+.cfg-section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.cfg-section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.cfg-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;margin-bottom:12px}
+.cfg-card-title{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.cfg-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border)}
+.cfg-toggle-row:last-child{border-bottom:none;padding-bottom:0}
+.cfg-toggle-row:first-child{padding-top:0}
+.cfg-toggle-lbl{font-size:14px;font-weight:600;color:var(--text)}
+.cfg-toggle-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.cfg-save-bar{display:flex;align-items:center;gap:12px;margin-top:24px;padding-top:20px;border-top:1px solid var(--border)}
+.cfg-horario-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.cfg-horario-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.cfg-horario-day{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);display:flex;align-items:center;justify-content:space-between}
+.cfg-tip{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--blue);display:flex;align-items:flex-start;gap:8px}
+
+/* ── Estoque sub-menu ─────────────────────────────────────────────────────── */
+.nav-group-btn{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all .15s;font-size:13px;font-weight:500;color:var(--text2);border:none;background:transparent;width:100%;font-family:inherit;text-align:left}
+.nav-group-btn:hover{background:var(--card);color:var(--text)}
+.nav-group-btn.active{background:var(--acc-gl);color:var(--acc);font-weight:600}
+.nav-group-btn .nav-icon{width:16px;height:16px;flex-shrink:0;opacity:.6}
+.nav-group-btn:hover .nav-icon,.nav-group-btn.active .nav-icon{opacity:1}
+.nav-group-arrow{margin-left:auto;transition:transform .2s;opacity:.4;font-size:10px}
+.nav-group-btn.open .nav-group-arrow{transform:rotate(90deg);opacity:.8}
+.nav-submenu{overflow:hidden;max-height:0;transition:max-height .25s ease}
+.nav-submenu.open{max-height:320px}
+.nav-sub{display:flex;align-items:center;gap:7px;padding:6px 10px 6px 30px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text3);border:none;background:transparent;width:100%;font-family:inherit;text-align:left;transition:all .15s}
+.nav-sub:hover{background:var(--card);color:var(--text)}
+.nav-sub.active{color:var(--acc);font-weight:600;background:var(--acc-gl)}
+/* Iframe estoque */
+#panel-estoque{padding:0!important}
+#estoque-frame{width:100%;height:100%;border:none;display:block}
 </style>
 </head>
 <body>
@@ -510,7 +549,7 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
 
   <!-- SIDEBAR -->
   <?php
-  function _ic($p){return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon">'.$p.'</svg>';}
+  function _ic(string $p): string {return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon">'.$p.'</svg>';}
   $_E='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-ext"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
   ?>
   <aside class="sidebar">
@@ -538,7 +577,23 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
       <div class="sb-section">Operação</div>
       <a href="caixa/turno.php" class="nav-item" target="_blank"><?= _ic('<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 019.9-1"/>') ?><span>Caixa &amp; Turnos</span><?= $_E ?></a>
       <a href="../garcom/comanda.php" class="nav-item" target="_blank"><?= _ic('<path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>') ?><span>Garçom / Comanda</span><?= $_E ?></a>
-      <a href="estoque/" class="nav-item" target="_blank"><?= _ic('<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>') ?><span>Estoque</span><?= $_E ?></a>
+      <!-- Estoque com sub-menu -->
+      <div>
+        <button class="nav-group-btn" id="nav-estoque-btn" onclick="toggleEstoqueMenu()">
+          <?= _ic('<path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>') ?>
+          <span>Estoque</span>
+          <span class="nav-group-arrow">▶</span>
+        </button>
+        <div class="nav-submenu" id="estoque-submenu">
+          <button class="nav-sub" data-est="insumos"       onclick="estTab('insumos')">       📦 Insumos</button>
+          <button class="nav-sub" data-est="movimentacoes" onclick="estTab('movimentacoes')">  ↕ Movimentações</button>
+          <button class="nav-sub" data-est="fichas"        onclick="estTab('fichas')">         🍽️ Fichas Técnicas</button>
+          <button class="nav-sub" data-est="relatorio"     onclick="estTab('relatorio')">      📊 Relatório</button>
+          <button class="nav-sub" data-est="inteligente"   onclick="estTab('inteligente')">    🧠 Inteligente</button>
+          <button class="nav-sub" data-est="lotes"         onclick="estTab('lotes')">          📋 Lotes</button>
+          <button class="nav-sub" data-est="compras"       onclick="estTab('compras')">        🛒 Compras</button>
+        </div>
+      </div>
       <a href="clientes/" class="nav-item" target="_blank"><?= _ic('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>') ?><span>Fidelidade</span><?= $_E ?></a>
 
       <div class="sb-section">Telas</div>
@@ -554,7 +609,24 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
       <div class="sb-section">Admin</div>
       <button class="nav-item" data-tab="usuarios"><?= _ic('<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>') ?><span>Usuários</span></button>
       <button class="nav-item" data-tab="auditoria"><?= _ic('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>') ?><span>Auditoria</span></button>
-      <button class="nav-item" data-tab="configuracoes"><?= _ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>') ?><span>Configurações</span></button>
+      <!-- Configurações com sub-menu -->
+      <div>
+        <button class="nav-group-btn" id="nav-cfg-btn" onclick="toggleCfgMenu()">
+          <?= _ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>') ?>
+          <span>Configurações</span>
+          <span class="nav-group-arrow">▶</span>
+        </button>
+        <div class="nav-submenu" id="cfg-submenu">
+          <button class="nav-sub" data-cfg="loja"         onclick="cfgTab('loja')">        🏪 Loja</button>
+          <button class="nav-sub" data-cfg="totem"        onclick="cfgTab('totem')">       🖥️ Totem &amp; KDS</button>
+          <button class="nav-sub" data-cfg="pagamentos"   onclick="cfgTab('pagamentos')">  💳 Pagamentos</button>
+          <button class="nav-sub" data-cfg="impressora"   onclick="cfgTab('impressora')">  🖨️ Impressora</button>
+          <button class="nav-sub" data-cfg="fidelidade"   onclick="cfgTab('fidelidade')">  ⭐ Fidelidade</button>
+          <button class="nav-sub" data-cfg="integracoes"  onclick="cfgTab('integracoes')"> 📲 Integrações</button>
+          <button class="nav-sub" data-cfg="alertas"      onclick="cfgTab('alertas')">     🔔 Alertas</button>
+          <button class="nav-sub" data-cfg="backup"       onclick="cfgTab('backup')">      💾 Backup</button>
+        </div>
+      </div>
       <a href="2fa/setup.php" class="nav-item" target="_blank"><?= _ic('<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>') ?><span>Segurança 2FA</span><?= $_E ?></a>
       <a href="email/" class="nav-item" target="_blank"><?= _ic('<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>') ?><span>E-mail Semanal</span><?= $_E ?></a>
       <a href="#" class="nav-item" id="btn-backup" onclick="fazBackup(event)"><?= _ic('<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>') ?><span>Backup BD</span></a>
@@ -970,6 +1042,11 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
         </div>
       </div>
 
+      <!-- ─── ESTOQUE (iframe embutido) ───────────────────────────────── -->
+      <div class="panel" id="panel-estoque">
+        <iframe id="estoque-frame" src="estoque/?embedded=1" title="Gestão de Estoque"></iframe>
+      </div>
+
       <?php if ($isAdmin): ?>
       <!-- ─── USUÁRIOS ────────────────────────────────────────────────── -->
       <div class="panel" id="panel-usuarios">
@@ -1001,11 +1078,427 @@ input[type=range].rel-slider{width:100%;accent-color:var(--acc);cursor:pointer}
           <div class="pagination" id="aud-pagination"></div>
         </div>
       </div>
-      <!-- ─── CONFIGURAÇÕES ──────────────────────────────────────────── -->
-      <div class="panel" id="panel-configuracoes">
-        <div class="data-table-wrap">
-          <div class="data-table-head"><h3>Configurações da Loja</h3></div>
-          <div style="padding:24px;display:flex;flex-direction:column;gap:20px;max-width:640px">
+      <!-- ─── CONFIGURAÇÕES — 8 sub-painéis ────────────────────────── -->
+      <!-- ── CFG: LOJA ──────────────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-loja">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(255,85,0,.12);color:var(--acc)">🏪</div>
+            <div><div class="cfg-title">Informações da Loja</div><div class="cfg-sub">Dados que aparecem no totem, notas e relatórios</div></div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarCfgLoja()">💾 Salvar</button>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Dados principais</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field" style="flex:2"><label>Nome da loja *</label><input type="text" id="cfg-nome" placeholder="Café Comunhão"></div>
+              <div class="field"><label>CNPJ</label><input type="text" id="cfg-cnpj" placeholder="00.000.000/0001-00" maxlength="18"></div>
+            </div>
+            <div class="form-row">
+              <div class="field" style="flex:2"><label>Endereço completo</label><input type="text" id="cfg-endereco" placeholder="SCS Quadra 04, Bloco A — Brasília"></div>
+              <div class="field"><label>Telefone / WhatsApp</label><input type="text" id="cfg-telefone" placeholder="(61) 98000-0000"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>E-mail de contato</label><input type="email" id="cfg-email" placeholder="contato@cafecomunhao.com"></div>
+              <div class="field"><label>Instagram</label><input type="text" id="cfg-instagram" placeholder="@cafecomunhao"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Identidade visual</div>
+          <div class="cfg-card">
+            <div class="field"><label>URL da Logo (deixe vazio para usar texto)</label><input type="text" id="cfg-logo" placeholder="https://..."></div>
+            <div class="form-row">
+              <div class="field"><label>URL base do Totem <small style="color:var(--text3)">(para QR Code nas notas)</small></label><input type="text" id="cfg-url" placeholder="http://192.168.1.237/totem"><small style="color:var(--text3);font-size:11px">Sem /status no final</small></div>
+              <div class="field"><label>Mensagem de boas-vindas no totem</label><input type="text" id="cfg-msg-boasvindas" placeholder="Bem-vindo! O que vai querer hoje?" maxlength="60"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Horários de funcionamento</div>
+          <div class="cfg-tip" style="margin-bottom:12px">ℹ️ Informativo — aparece no rodapé do totem e pode ser usado para alertas automáticos.</div>
+          <div class="cfg-horario-grid" id="cfg-horarios-grid">
+            <?php foreach(['seg'=>'Segunda','ter'=>'Terça','qua'=>'Quarta','qui'=>'Quinta','sex'=>'Sexta','sab'=>'Sábado','dom'=>'Domingo'] as $k=>$v): ?>
+            <div class="cfg-horario-card">
+              <div class="cfg-horario-day">
+                <span><?= $v ?></span>
+                <label class="toggle-sw"><input type="checkbox" id="cfg-h-<?=$k?>-ativo" checked><span class="toggle-track"></span></label>
+              </div>
+              <div class="form-row" style="gap:8px">
+                <div class="field"><label style="font-size:10px">Abertura</label><input type="time" id="cfg-h-<?=$k?>-ab" value="08:00" style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px;padding:6px 10px;outline:none;width:100%"></div>
+                <div class="field"><label style="font-size:10px">Fechamento</label><input type="time" id="cfg-h-<?=$k?>-fc" value="18:00" style="background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px;padding:6px 10px;outline:none;width:100%"></div>
+              </div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <div id="cfg-loja-status" style="display:none;font-size:13px;color:var(--green);margin-top:8px"></div>
+      </div>
+
+      <!-- ── CFG: TOTEM & KDS ──────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-totem">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(59,130,246,.12);color:var(--blue)">🖥️</div>
+            <div><div class="cfg-title">Totem &amp; KDS</div><div class="cfg-sub">Comportamento do autoatendimento e da cozinha</div></div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarCfgTotem()">💾 Salvar</button>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Totem — autoatendimento</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field"><label>Inatividade antes de voltar ao início (s)</label><input type="number" id="cfg-idle" min="30" max="600" placeholder="120"><small style="color:var(--text3);font-size:11px">Recomendado: 60-120s</small></div>
+              <div class="field"><label>Contagem regressiva na confirmação (s)</label><input type="number" id="cfg-confirm" min="10" max="120" placeholder="30"></div>
+              <div class="field"><label>Máx. itens por pedido</label><input type="number" id="cfg-max-itens" min="1" max="50" placeholder="20"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Horário de funcionamento</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field">
+                <label>Aviso de fechamento (minutos antes)</label>
+                <input type="number" id="cfg-aviso-fechamento" min="0" max="60" placeholder="10" value="10">
+                <small style="color:var(--text3);font-size:11px">0 = desativado · Exibe alerta no totem X min antes de fechar</small>
+              </div>
+              <div class="field">
+                <label>Auto-recarga da página (minutos)</label>
+                <input type="number" id="cfg-autoreload" min="0" max="1440" placeholder="0" value="0">
+                <small style="color:var(--text3);font-size:11px">0 = desativado · Recarrega automaticamente a cada X min</small>
+              </div>
+            </div>
+            <div class="cfg-tip">
+              💡 A auto-recarga garante que novas configurações (horários, mensagens, produtos) sejam aplicadas sem intervenção manual no totem.
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">KDS — cozinha</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field"><label>Intervalo de atualização do KDS (s)</label><input type="number" id="cfg-kds-refresh" min="2" max="60" placeholder="5"><small style="color:var(--text3);font-size:11px">Recomendado: 5-10s</small></div>
+              <div class="field"><label>Alerta sonoro no KDS ao novo pedido</label>
+                <select id="cfg-kds-som">
+                  <option value="0">Desativado</option>
+                  <option value="1">Bip simples</option>
+                  <option value="2">Notificação</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Taxa de serviço</div>
+          <div class="cfg-card">
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Cobrar taxa de serviço</div><div class="cfg-toggle-sub">Aplica % sobre o subtotal do pedido</div></div>
+              <label class="toggle-sw"><input type="checkbox" id="cfg-taxa-serv-ativa"><span class="toggle-track"></span></label>
+            </div>
+            <div class="field"><label>Percentual da taxa de serviço (%)</label><input type="number" id="cfg-taxa-servico" min="0" max="30" step="0.5" placeholder="10"></div>
+          </div>
+        </div>
+        <div id="cfg-totem-status" style="display:none;font-size:13px;color:var(--green);margin-top:8px"></div>
+      </div>
+
+      <!-- ── CFG: PAGAMENTOS ──────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-pagamentos">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(34,197,94,.12);color:var(--green)">💳</div>
+            <div><div class="cfg-title">Pagamentos</div><div class="cfg-sub">Métodos aceitos, taxas de operadoras e PIX</div></div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarCfgPagamentos()">💾 Salvar</button>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Métodos aceitos no totem</div>
+          <div class="cfg-card">
+            <div class="cfg-toggle-row"><div><div class="cfg-toggle-lbl">PIX</div><div class="cfg-toggle-sub">QR Code gerado na tela</div></div><label class="toggle-sw"><input type="checkbox" id="cfg-pag-pix" checked><span class="toggle-track"></span></label></div>
+            <div class="cfg-toggle-row"><div><div class="cfg-toggle-lbl">Cartão de Crédito</div><div class="cfg-toggle-sub">Pagamento via maquininha</div></div><label class="toggle-sw"><input type="checkbox" id="cfg-pag-credito" checked><span class="toggle-track"></span></label></div>
+            <div class="cfg-toggle-row"><div><div class="cfg-toggle-lbl">Cartão de Débito</div><div class="cfg-toggle-sub">Pagamento via maquininha</div></div><label class="toggle-sw"><input type="checkbox" id="cfg-pag-debito" checked><span class="toggle-track"></span></label></div>
+            <div class="cfg-toggle-row"><div><div class="cfg-toggle-lbl">Dinheiro</div><div class="cfg-toggle-sub">Pagamento no caixa</div></div><label class="toggle-sw"><input type="checkbox" id="cfg-pag-dinheiro" checked><span class="toggle-track"></span></label></div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Taxas de operadoras (para cálculo de custo real)</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field"><label>Taxa cartão de crédito (%)</label><input type="number" id="cfg-taxa-cred" step="0.01" min="0" max="10" placeholder="2.5"></div>
+              <div class="field"><label>Taxa cartão de débito (%)</label><input type="number" id="cfg-taxa-deb" step="0.01" min="0" max="10" placeholder="1.5"></div>
+              <div class="field"><label>Taxa PIX (%)</label><input type="number" id="cfg-taxa-pix" step="0.01" min="0" max="5" placeholder="0" value="0"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">PIX — QR Code automático</div>
+          <div class="cfg-card">
+            <div class="field"><label>Chave PIX</label><input type="text" id="cfg-pix-chave" placeholder="CNPJ, CPF, email, telefone ou chave aleatória"></div>
+            <div class="form-row">
+              <div class="field"><label>Nome do beneficiário <small style="color:var(--text3)">(máx 25 chars)</small></label><input type="text" id="cfg-pix-benef" maxlength="25" placeholder="Cafe Comunhao"></div>
+              <div class="field"><label>Cidade <small style="color:var(--text3)">(máx 15 chars, sem acento)</small></label><input type="text" id="cfg-pix-cidade" maxlength="15" placeholder="BRASILIA"></div>
+            </div>
+          </div>
+        </div>
+        <div id="cfg-pag-status" style="display:none;font-size:13px;color:var(--green);margin-top:8px"></div>
+      </div>
+
+      <!-- ── CFG: IMPRESSORA ──────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-impressora">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(107,114,128,.12);color:var(--text2)">🖨️</div>
+            <div><div class="cfg-title">Impressora Térmica</div><div class="cfg-sub">ESC/POS via rede TCP/IP</div></div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarCfgImpressora()">💾 Salvar</button>
+        </div>
+
+        <div class="cfg-card">
+          <div class="cfg-toggle-row">
+            <div><div class="cfg-toggle-lbl">Impressão automática ao confirmar pedido</div><div class="cfg-toggle-sub">Imprime cupom sem precisar de ação manual</div></div>
+            <label class="toggle-sw"><input type="checkbox" id="cfg-imp-ativa"><span class="toggle-track"></span></label>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Configuração de rede</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field" style="flex:2"><label>IP da impressora na rede</label><input type="text" id="cfg-imp-ip" placeholder="192.168.1.100"></div>
+              <div class="field"><label>Porta TCP</label><input type="number" id="cfg-imp-porta" value="9100" min="1" max="65535"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Largura do papel</label>
+                <select id="cfg-imp-largura">
+                  <option value="42">80mm — 42 colunas</option>
+                  <option value="32">58mm — 32 colunas</option>
+                </select>
+              </div>
+              <div class="field"><label>Cópias por pedido</label><input type="number" id="cfg-imp-copias" min="1" max="3" value="1" placeholder="1"></div>
+              <div class="field"><label>Imprimir na cozinha (KDS)</label>
+                <select id="cfg-imp-cozinha">
+                  <option value="0">Não</option>
+                  <option value="1">Sim — via KDS</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-tip">
+          💡 Para testar: vá em <strong>Admin → Pedidos</strong>, abra um pedido e clique em "Reimprimir".
+        </div>
+        <div id="cfg-imp-status" style="display:none;font-size:13px;color:var(--green);margin-top:8px"></div>
+      </div>
+
+      <!-- ── CFG: FIDELIDADE ──────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-fidelidade">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(245,158,11,.12);color:var(--gold)">⭐</div>
+            <div><div class="cfg-title">Programa de Fidelidade</div><div class="cfg-sub">Pontos, resgate e validade</div></div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarCfgFidelidade()">💾 Salvar</button>
+        </div>
+
+        <div class="cfg-card">
+          <div class="cfg-toggle-row">
+            <div><div class="cfg-toggle-lbl">Programa de fidelidade ativo</div><div class="cfg-toggle-sub">Clientes acumulam pontos a cada compra</div></div>
+            <label class="toggle-sw"><input type="checkbox" id="cfg-fid-ativa"><span class="toggle-track"></span></label>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Regras de pontuação</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field"><label>Pontos por R$ 1,00 gasto</label><input type="number" id="cfg-fid-pts-real" step="0.1" min="0.1" placeholder="1.0"><small style="color:var(--text3);font-size:11px">Ex: 1 = ganha 1 ponto por real</small></div>
+              <div class="field"><label>Valor de 1 ponto em R$</label><input type="number" id="cfg-fid-real-pts" step="0.01" min="0.01" placeholder="0.05"><small style="color:var(--text3);font-size:11px">Ex: 0.05 = 20 pts = R$ 1,00</small></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Validade dos pontos (dias)</label><input type="number" id="cfg-fid-val-dias" min="30" placeholder="365"><small style="color:var(--text3);font-size:11px">0 = sem validade</small></div>
+              <div class="field"><label>Mínimo de pontos para resgatar</label><input type="number" id="cfg-fid-min-resgate" min="1" placeholder="100"></div>
+              <div class="field"><label>Máx. desconto por resgate (%)</label><input type="number" id="cfg-fid-max-desc" min="1" max="100" placeholder="20"><small style="color:var(--text3);font-size:11px">% máximo do pedido em pontos</small></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="cfg-fid-preview" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:13px;color:var(--text2)">
+          💡 <strong>Simulação:</strong> Um pedido de <strong>R$ 25,00</strong> gera <span id="cfg-fid-sim-pts" style="color:var(--gold);font-weight:700">—</span> pontos, valendo <span id="cfg-fid-sim-val" style="color:var(--green);font-weight:700">—</span>.
+        </div>
+        <div id="cfg-fid-status" style="display:none;font-size:13px;color:var(--green);margin-top:8px"></div>
+      </div>
+
+      <!-- ── CFG: INTEGRAÇÕES ──────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-integracoes">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(139,92,246,.12);color:var(--purple)">📲</div>
+            <div><div class="cfg-title">Integrações Externas</div><div class="cfg-sub">n8n, WhatsApp, webhooks e automações</div></div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarCfgIntegracoes()">💾 Salvar</button>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">n8n — automação</div>
+          <div class="cfg-card">
+            <div class="field">
+              <label>URL base do webhook n8n</label>
+              <input type="text" id="cfg-n8n-url" placeholder="http://192.168.1.100:5678/webhook">
+              <small style="color:var(--text3);font-size:11px">Sem barra no final</small>
+            </div>
+            <div class="field">
+              <label>Número WhatsApp para alertas</label>
+              <input type="text" id="cfg-n8n-whatsapp" placeholder="5561999999999" maxlength="20">
+              <small style="color:var(--text3);font-size:11px">DDI + DDD + número, sem espaços ou traços</small>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn-secondary" id="btn-testar-n8n">📡 Testar conexão</button>
+              <span id="n8n-status" style="font-size:13px;display:none"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Webhook — eventos</div>
+          <div class="cfg-card">
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Notificar novo pedido</div><div class="cfg-toggle-sub">Envia dados do pedido ao webhook</div></div>
+              <label class="toggle-sw"><input type="checkbox" id="cfg-wh-pedido"><span class="toggle-track"></span></label>
+            </div>
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Notificar mudança de status</div><div class="cfg-toggle-sub">Preparando, pronto, entregue</div></div>
+              <label class="toggle-sw"><input type="checkbox" id="cfg-wh-status"><span class="toggle-track"></span></label>
+            </div>
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Notificar alerta de estoque</div><div class="cfg-toggle-sub">Quando insumo atingir ROP</div></div>
+              <label class="toggle-sw"><input type="checkbox" id="cfg-wh-estoque"><span class="toggle-track"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div id="cfg-int-status" style="display:none;font-size:13px;color:var(--green);margin-top:8px"></div>
+      </div>
+
+      <!-- ── CFG: ALERTAS ─────────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-alertas">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(239,68,68,.1);color:var(--red)">🔔</div>
+            <div><div class="cfg-title">Alertas &amp; Notificações</div><div class="cfg-sub">Quando e como o sistema avisa você</div></div>
+          </div>
+          <button class="btn btn-primary" onclick="salvarCfgAlertas()">💾 Salvar</button>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Estoque</div>
+          <div class="cfg-card">
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Alerta de estoque via WhatsApp</div><div class="cfg-toggle-sub">Envia mensagem quando insumo atingir ROP</div></div>
+              <label class="toggle-sw"><input type="checkbox" id="cfg-alerta-zap-ativo"><span class="toggle-track"></span></label>
+            </div>
+            <div class="field"><label>Antecedência de alerta (dias antes de acabar)</label><input type="number" id="cfg-alerta-est-dias" min="1" max="30" placeholder="3"><small style="color:var(--text3);font-size:11px">Avisa quando restar menos que X dias de estoque</small></div>
+            <div class="field"><label>Alerta de validade de lote (dias)</label><input type="number" id="cfg-alerta-validade-dias" min="1" max="60" placeholder="7"><small style="color:var(--text3);font-size:11px">Avisa quando lote vencer em menos de X dias</small></div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Relatórios automáticos</div>
+          <div class="cfg-card">
+            <div class="field"><label>E-mail para relatório diário</label><input type="email" id="cfg-alerta-email" placeholder="gestor@cafecomunhao.com"></div>
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Enviar resumo diário por e-mail</div><div class="cfg-toggle-sub">Envia às 23h com faturamento e pedidos do dia</div></div>
+              <label class="toggle-sw"><input type="checkbox" id="cfg-email-diario"><span class="toggle-track"></span></label>
+            </div>
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Enviar relatório semanal</div><div class="cfg-toggle-sub">Toda segunda-feira com resumo da semana</div></div>
+              <label class="toggle-sw"><input type="checkbox" id="cfg-email-semanal"><span class="toggle-track"></span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Limites de atenção</div>
+          <div class="cfg-card">
+            <div class="form-row">
+              <div class="field"><label>Alerta de pedido sem movimentação (min)</label><input type="number" id="cfg-alerta-pedido-min" min="5" max="120" placeholder="30"><small style="color:var(--text3);font-size:11px">Pedido preso em "preparando" por mais de X min</small></div>
+              <div class="field"><label>Alerta de caixa com muito troco (R$)</label><input type="number" id="cfg-alerta-caixa-max" min="50" placeholder="500"></div>
+            </div>
+          </div>
+        </div>
+        <div id="cfg-alertas-status" style="display:none;font-size:13px;color:var(--green);margin-top:8px"></div>
+      </div>
+
+      <!-- ── CFG: BACKUP ──────────────────────────────────────────────── -->
+      <div class="panel" id="panel-cfg-backup">
+        <div class="cfg-header">
+          <div class="cfg-header-left">
+            <div class="cfg-header-icon" style="background:rgba(34,197,94,.1);color:var(--green)">💾</div>
+            <div><div class="cfg-title">Backup &amp; Exportação</div><div class="cfg-sub">Exporte seus dados com segurança</div></div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Exportar dados</div>
+          <div class="cfg-card">
+            <div class="cfg-tip" style="margin-bottom:4px">🔒 Nenhuma exportação contém senhas em texto simples.</div>
+            <div class="form-row">
+              <div class="field"><label>Data inicial</label><input type="date" id="bkp-ini"></div>
+              <div class="field"><label>Data final</label><input type="date" id="bkp-fim"></div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" id="btn-bkp-json">⬇ JSON completo</button>
+              <button class="btn btn-secondary" id="btn-bkp-csv">⬇ CSV pedidos</button>
+              <button class="btn btn-secondary" id="btn-bkp-pdf">🖨️ PDF relatório</button>
+            </div>
+            <div id="bkp-status" style="font-size:13px;color:var(--text2);display:none"></div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Manutenção do banco</div>
+          <div class="cfg-card">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-secondary" id="btn-backup" onclick="fazBackup(event)">💾 Backup completo do BD</button>
+              <span style="font-size:12px;color:var(--text3)">Exporta dump SQL do PostgreSQL</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-section-title">Segurança da sessão</div>
+          <div class="cfg-card">
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">2FA obrigatório para admins</div><div class="cfg-toggle-sub">Requer código de autenticação no login</div></div>
+              <a href="2fa/setup.php" target="_blank" class="btn btn-secondary btn-sm">Configurar →</a>
+            </div>
+            <div class="cfg-toggle-row">
+              <div><div class="cfg-toggle-lbl">Logs de auditoria</div><div class="cfg-toggle-sub">Registro de todas as ações administrativas</div></div>
+              <button class="btn btn-secondary btn-sm" onclick="cfgTab('auditoria_inline')">Ver logs →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Manter também o panel-backup legado para o link do btn-backup na sidebar -->
+      <div class="panel" id="panel-backup" style="display:none!important"></div>
+      <!-- Manter panel-configuracoes legado para não quebrar o switchTab existente -->
+      <div class="panel" id="panel-configuracoes" style="display:none!important">
+        <!-- campos legados para o JS de save existente -->
+        <input type="hidden" id="cfg-status">
+        <input type="hidden" id="btn-salvar-cfg">
+      </div>
             <div class="form-row">
               <div class="field" style="flex:2">
                 <label>Nome da loja</label>
@@ -1364,8 +1857,13 @@ tickClock(); setInterval(tickClock, 1000);
 
 // ── Tab switching ────────────────────────────────────────────────────
 const TITLES = { dashboard:'Dashboard', pedidos:'Pedidos', produtos:'Produtos',
-  categorias:'Categorias', relatorios:'Relatórios', usuarios:'Usuários', auditoria:'Auditoria',
-  configuracoes:'Configurações', backup:'Backup & Exportação' };
+  categorias:'Categorias', relatorios:'Relatórios', estrategias:'Estratégias',
+  usuarios:'Usuários', auditoria:'Auditoria', estoque:'Estoque',
+  configuracoes:'Configurações', backup:'Backup',
+  'cfg-loja':'Configurações — 🏪 Loja', 'cfg-totem':'Configurações — 🖥️ Totem & KDS',
+  'cfg-pagamentos':'Configurações — 💳 Pagamentos', 'cfg-impressora':'Configurações — 🖨️ Impressora',
+  'cfg-fidelidade':'Configurações — ⭐ Fidelidade', 'cfg-integracoes':'Configurações — 📲 Integrações',
+  'cfg-alertas':'Configurações — 🔔 Alertas', 'cfg-backup':'Configurações — 💾 Backup' };
 
 let currentTab = 'dashboard';
 function switchTab(tab) {
@@ -2868,28 +3366,55 @@ async function loadConfiguracoes() {
   const res = await api('configuracoes.php');
   if (!res.success) return;
   const d = res.data;
-  const g = (id, chave) => { const el = document.getElementById(id); if (el && d[chave]) el.value = d[chave].valor ?? ''; };
-  g('cfg-nome',       'loja_nome');
-  g('cfg-cnpj',       'loja_cnpj');
-  g('cfg-endereco',   'loja_endereco');
-  g('cfg-telefone',   'loja_telefone');
-  g('cfg-url',        'loja_url');
-  g('cfg-logo',       'loja_logo_url');
-  g('cfg-idle',       'totem_idle_segundos');
-  g('cfg-confirm',    'totem_confirmar_segundos');
-  g('cfg-kds-refresh','kds_refresh_segundos');
+
+  const g  = (id, k) => { const el=document.getElementById(id); if(el && d[k]) el.value = d[k].valor??''; };
+  const gb = (id, k) => { const el=document.getElementById(id); if(el && d[k]) el.checked = d[k].valor==='1'||d[k].valor==='true'; };
+  const gv = (id, k) => { const el=document.getElementById(id); if(el && d[k]) el.value = d[k].valor??el.value; };
+
+  // Loja
+  g('cfg-nome','loja_nome'); g('cfg-cnpj','loja_cnpj'); g('cfg-endereco','loja_endereco');
+  g('cfg-telefone','loja_telefone'); g('cfg-email','loja_email'); g('cfg-instagram','loja_instagram');
+  g('cfg-url','loja_url'); g('cfg-logo','loja_logo_url');
+  g('cfg-msg-boasvindas','totem_mensagem_boasvindas');
+  // Horários
+  ['seg','ter','qua','qui','sex','sab','dom'].forEach(dia => {
+    gb('cfg-h-'+dia+'-ativo', 'horario_'+dia+'_ativo');
+    g('cfg-h-'+dia+'-ab',     'horario_'+dia+'_abertura');
+    g('cfg-h-'+dia+'-fc',     'horario_'+dia+'_fechamento');
+  });
+  // Totem
+  g('cfg-idle','totem_idle_segundos'); g('cfg-confirm','totem_confirmar_segundos');
+  g('cfg-kds-refresh','kds_refresh_segundos'); g('cfg-max-itens','totem_max_itens_pedido');
+  g('cfg-aviso-fechamento','totem_aviso_fechamento_min'); g('cfg-autoreload','totem_autoreload_minutos');
+  gv('cfg-kds-som','kds_som'); gv('cfg-taxa-servico','taxa_servico_percentual');
+  gb('cfg-taxa-serv-ativa','taxa_servico_ativa');
+  // Pagamentos
+  gb('cfg-pag-pix','pagamento_pix_ativo'); gb('cfg-pag-credito','pagamento_credito_ativo');
+  gb('cfg-pag-debito','pagamento_debito_ativo'); gb('cfg-pag-dinheiro','pagamento_dinheiro_ativo');
+  g('cfg-taxa-cred','taxa_credito'); g('cfg-taxa-deb','taxa_debito'); g('cfg-taxa-pix','taxa_pix');
+  g('cfg-pix-chave','pix_chave'); g('cfg-pix-benef','pix_beneficiario'); g('cfg-pix-cidade','pix_cidade');
   // Impressora
-  const impAtiva = d['impressora_ativa']?.valor === 'true';
-  const impAtivaEl = document.getElementById('cfg-imp-ativa');
-  if (impAtivaEl) impAtivaEl.checked = impAtiva;
-  g('cfg-imp-ip',     'impressora_ip');
-  g('cfg-imp-porta',  'impressora_porta');
-  const largEl = document.getElementById('cfg-imp-largura');
-  if (largEl && d['impressora_largura']) largEl.value = d['impressora_largura'].valor;
-  // PIX
-  g('cfg-pix-chave',  'pix_chave');
-  g('cfg-pix-benef',  'pix_beneficiario');
-  g('cfg-pix-cidade', 'pix_cidade');
+  gb('cfg-imp-ativa','impressora_ativa');
+  g('cfg-imp-ip','impressora_ip'); g('cfg-imp-porta','impressora_porta');
+  gv('cfg-imp-largura','impressora_largura'); g('cfg-imp-copias','impressora_copias');
+  gv('cfg-imp-cozinha','impressora_cozinha');
+  // Fidelidade
+  gb('cfg-fid-ativa','fidelidade_ativa');
+  g('cfg-fid-pts-real','pontos_por_real'); g('cfg-fid-real-pts','real_por_ponto');
+  g('cfg-fid-val-dias','validade_dias'); g('cfg-fid-min-resgate','pontos_minimo_resgate');
+  g('cfg-fid-max-desc','pontos_max_desc_pct');
+  // Integrações
+  g('cfg-n8n-url','n8n_webhook_base'); g('cfg-n8n-whatsapp','n8n_whatsapp');
+  gb('cfg-wh-pedido','webhook_novo_pedido'); gb('cfg-wh-status','webhook_status');
+  gb('cfg-wh-estoque','webhook_estoque');
+  // Alertas
+  gb('cfg-alerta-zap-ativo','alerta_estoque_zap');
+  g('cfg-alerta-est-dias','alerta_estoque_dias'); g('cfg-alerta-validade-dias','alerta_validade_dias');
+  g('cfg-alerta-email','alerta_email');
+  gb('cfg-email-diario','alerta_email_diario'); gb('cfg-email-semanal','alerta_email_semanal');
+  g('cfg-alerta-pedido-min','alerta_pedido_min'); g('cfg-alerta-caixa-max','alerta_caixa_max');
+
+  atualizarSimFidelidade();
 }
 
 document.getElementById('btn-salvar-cfg')?.addEventListener('click', async () => {
@@ -3114,6 +3639,234 @@ async function fazBackup(e) {
   btn.textContent = '💾 Backup BD';
   btn.style.pointerEvents = '';
 }
+
+// ── Configurações sub-menu ───────────────────────────────────────────
+function toggleCfgMenu() {
+  const btn  = document.getElementById('nav-cfg-btn');
+  const menu = document.getElementById('cfg-submenu');
+  const isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    menu.classList.remove('open');
+    btn.classList.remove('open','active');
+  } else {
+    menu.classList.add('open');
+    btn.classList.add('open','active');
+    cfgTab('loja');
+  }
+}
+
+function cfgTab(section) {
+  // Activar painel
+  document.querySelectorAll('[id^="panel-cfg-"]').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-cfg-' + section);
+  if (panel) {
+    panel.classList.add('active');
+    // Esconder outros painéis
+    document.querySelectorAll('.panel.active:not(#panel-cfg-' + section + ')').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-cfg-' + section).classList.add('active');
+  }
+  // Marcar sub-item activo
+  document.querySelectorAll('#cfg-submenu .nav-sub').forEach(el =>
+    el.classList.toggle('active', el.dataset.cfg === section)
+  );
+  document.getElementById('cfg-submenu').classList.add('open');
+  document.getElementById('nav-cfg-btn').classList.add('open','active');
+  // Actualizar título do topbar
+  const lbl = {'loja':'🏪 Loja','totem':'🖥️ Totem & KDS','pagamentos':'💳 Pagamentos',
+    'impressora':'🖨️ Impressora','fidelidade':'⭐ Fidelidade','integracoes':'📲 Integrações',
+    'alertas':'🔔 Alertas','backup':'💾 Backup'};
+  document.getElementById('topbar-title').textContent = 'Configurações — ' + (lbl[section]||section);
+  // Carregar dados ao abrir pela primeira vez
+  if (!window._cfgCarregado) { window._cfgCarregado = true; loadConfiguracoes(); }
+  // Simular fidelidade ao abrir
+  if (section === 'fidelidade') atualizarSimFidelidade();
+}
+
+// Salvar por seção — função genérica
+async function _salvarCfg(payload, statusId) {
+  const res = await api('configuracoes.php', { method:'POST', body: JSON.stringify(payload) });
+  const el = document.getElementById(statusId);
+  if (res?.success) {
+    toast('Configurações salvas!');
+    if (el) { el.textContent = '✓ Salvo!'; el.style.color='var(--green)'; el.style.display='inline'; setTimeout(()=>el.style.display='none',3000); }
+  } else {
+    toast('Erro: ' + (res?.error||'desconhecido'), 'err');
+    if (el) { el.textContent = '✗ Erro ao salvar'; el.style.color='var(--red)'; el.style.display='inline'; }
+  }
+}
+
+function salvarCfgLoja() {
+  const dias = ['seg','ter','qua','qui','sex','sab','dom'];
+  const payload = {
+    loja_nome:        document.getElementById('cfg-nome')?.value.trim()||'',
+    loja_cnpj:        document.getElementById('cfg-cnpj')?.value.trim()||'',
+    loja_endereco:    document.getElementById('cfg-endereco')?.value.trim()||'',
+    loja_telefone:    document.getElementById('cfg-telefone')?.value.trim()||'',
+    loja_email:       document.getElementById('cfg-email')?.value.trim()||'',
+    loja_instagram:   document.getElementById('cfg-instagram')?.value.trim()||'',
+    loja_logo_url:    document.getElementById('cfg-logo')?.value.trim()||'',
+    loja_url:         document.getElementById('cfg-url')?.value.trim()||'',
+    totem_mensagem_boasvindas: document.getElementById('cfg-msg-boasvindas')?.value.trim()||'',
+  };
+  dias.forEach(d => {
+    payload['horario_'+d+'_ativo']     = document.getElementById('cfg-h-'+d+'-ativo')?.checked ? '1':'0';
+    payload['horario_'+d+'_abertura']  = document.getElementById('cfg-h-'+d+'-ab')?.value||'';
+    payload['horario_'+d+'_fechamento']= document.getElementById('cfg-h-'+d+'-fc')?.value||'';
+  });
+  _salvarCfg(payload, 'cfg-loja-status');
+}
+
+function salvarCfgTotem() {
+  _salvarCfg({
+    totem_idle_segundos:           document.getElementById('cfg-idle')?.value||'120',
+    totem_confirmar_segundos:      document.getElementById('cfg-confirm')?.value||'30',
+    totem_max_itens_pedido:        document.getElementById('cfg-max-itens')?.value||'20',
+    totem_aviso_fechamento_min:    document.getElementById('cfg-aviso-fechamento')?.value||'10',
+    totem_autoreload_minutos:      document.getElementById('cfg-autoreload')?.value||'0',
+    kds_refresh_segundos:          document.getElementById('cfg-kds-refresh')?.value||'5',
+    kds_som:                       document.getElementById('cfg-kds-som')?.value||'0',
+    taxa_servico_ativa:            document.getElementById('cfg-taxa-serv-ativa')?.checked?'1':'0',
+    taxa_servico_percentual:       document.getElementById('cfg-taxa-servico')?.value||'0',
+  }, 'cfg-totem-status');
+}
+
+function salvarCfgPagamentos() {
+  _salvarCfg({
+    pagamento_pix_ativo:      document.getElementById('cfg-pag-pix')?.checked?'1':'0',
+    pagamento_credito_ativo:  document.getElementById('cfg-pag-credito')?.checked?'1':'0',
+    pagamento_debito_ativo:   document.getElementById('cfg-pag-debito')?.checked?'1':'0',
+    pagamento_dinheiro_ativo: document.getElementById('cfg-pag-dinheiro')?.checked?'1':'0',
+    taxa_credito:             document.getElementById('cfg-taxa-cred')?.value||'2.5',
+    taxa_debito:              document.getElementById('cfg-taxa-deb')?.value||'1.5',
+    taxa_pix:                 document.getElementById('cfg-taxa-pix')?.value||'0',
+    pix_chave:                document.getElementById('cfg-pix-chave')?.value.trim()||'',
+    pix_beneficiario:         document.getElementById('cfg-pix-benef')?.value.trim()||'',
+    pix_cidade:               document.getElementById('cfg-pix-cidade')?.value.trim()||'',
+  }, 'cfg-pag-status');
+}
+
+function salvarCfgImpressora() {
+  _salvarCfg({
+    impressora_ativa:   document.getElementById('cfg-imp-ativa')?.checked?'true':'false',
+    impressora_ip:      document.getElementById('cfg-imp-ip')?.value.trim()||'',
+    impressora_porta:   document.getElementById('cfg-imp-porta')?.value||'9100',
+    impressora_largura: document.getElementById('cfg-imp-largura')?.value||'42',
+    impressora_copias:  document.getElementById('cfg-imp-copias')?.value||'1',
+    impressora_cozinha: document.getElementById('cfg-imp-cozinha')?.value||'0',
+  }, 'cfg-imp-status');
+}
+
+function salvarCfgFidelidade() {
+  _salvarCfg({
+    fidelidade_ativa:       document.getElementById('cfg-fid-ativa')?.checked?'1':'0',
+    pontos_por_real:        document.getElementById('cfg-fid-pts-real')?.value||'1',
+    real_por_ponto:         document.getElementById('cfg-fid-real-pts')?.value||'0.05',
+    validade_dias:          document.getElementById('cfg-fid-val-dias')?.value||'365',
+    pontos_minimo_resgate:  document.getElementById('cfg-fid-min-resgate')?.value||'100',
+    pontos_max_desc_pct:    document.getElementById('cfg-fid-max-desc')?.value||'20',
+  }, 'cfg-fid-status');
+}
+
+function salvarCfgIntegracoes() {
+  _salvarCfg({
+    n8n_webhook_base:   document.getElementById('cfg-n8n-url')?.value.trim()||'',
+    n8n_whatsapp:       document.getElementById('cfg-n8n-whatsapp')?.value.trim()||'',
+    webhook_novo_pedido: document.getElementById('cfg-wh-pedido')?.checked?'1':'0',
+    webhook_status:     document.getElementById('cfg-wh-status')?.checked?'1':'0',
+    webhook_estoque:    document.getElementById('cfg-wh-estoque')?.checked?'1':'0',
+  }, 'cfg-int-status');
+}
+
+function salvarCfgAlertas() {
+  _salvarCfg({
+    alerta_estoque_zap:      document.getElementById('cfg-alerta-zap-ativo')?.checked?'1':'0',
+    alerta_estoque_dias:     document.getElementById('cfg-alerta-est-dias')?.value||'3',
+    alerta_validade_dias:    document.getElementById('cfg-alerta-validade-dias')?.value||'7',
+    alerta_email:            document.getElementById('cfg-alerta-email')?.value.trim()||'',
+    alerta_email_diario:     document.getElementById('cfg-email-diario')?.checked?'1':'0',
+    alerta_email_semanal:    document.getElementById('cfg-email-semanal')?.checked?'1':'0',
+    alerta_pedido_min:       document.getElementById('cfg-alerta-pedido-min')?.value||'30',
+    alerta_caixa_max:        document.getElementById('cfg-alerta-caixa-max')?.value||'500',
+  }, 'cfg-alertas-status');
+}
+
+// Simular fidelidade
+function atualizarSimFidelidade() {
+  const pts  = parseFloat(document.getElementById('cfg-fid-pts-real')?.value||1);
+  const val  = parseFloat(document.getElementById('cfg-fid-real-pts')?.value||0.05);
+  const ganho = (25 * pts).toFixed(0);
+  const emReais = (ganho * val).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  document.getElementById('cfg-fid-sim-pts').textContent = ganho + ' pontos';
+  document.getElementById('cfg-fid-sim-val').textContent = emReais;
+}
+['cfg-fid-pts-real','cfg-fid-real-pts'].forEach(id =>
+  document.getElementById(id)?.addEventListener('input', atualizarSimFidelidade)
+);
+
+// ── Estoque sub-menu e iframe ────────────────────────────────────────
+let _estFrameReady = false;
+let _estPendingTab = null;
+
+document.getElementById('estoque-frame').addEventListener('load', () => {
+  _estFrameReady = true;
+  if (_estPendingTab) {
+    _doEstTab(_estPendingTab);
+    _estPendingTab = null;
+  }
+});
+
+function toggleEstoqueMenu() {
+  const btn  = document.getElementById('nav-estoque-btn');
+  const menu = document.getElementById('estoque-submenu');
+  const isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    menu.classList.remove('open');
+    btn.classList.remove('open', 'active');
+  } else {
+    menu.classList.add('open');
+    btn.classList.add('open', 'active');
+    // Abrir e já activar Insumos por padrão
+    estTab('insumos');
+  }
+}
+
+function estTab(tab) {
+  // Garantir que o painel estoque está activo
+  switchTab('estoque');
+  // Marcar sub-item activo
+  document.querySelectorAll('#estoque-submenu .nav-sub').forEach(el =>
+    el.classList.toggle('active', el.dataset.est === tab)
+  );
+  // Abrir sub-menu se fechado
+  document.getElementById('estoque-submenu').classList.add('open');
+  document.getElementById('nav-estoque-btn').classList.add('open', 'active');
+  if (_estFrameReady) {
+    _doEstTab(tab);
+  } else {
+    _estPendingTab = tab;
+  }
+}
+
+function _doEstTab(tab) {
+  try {
+    const frame = document.getElementById('estoque-frame');
+    if (frame?.contentWindow?.switchTab) {
+      frame.contentWindow.switchTab(tab);
+    }
+  } catch(e) { console.warn('estoque iframe:', e); }
+}
+
+// Patch no switchTab original para sincronizar o botão de Estoque
+document.addEventListener('DOMContentLoaded', () => {
+  const tabs = document.querySelectorAll('.nav-item[data-tab]');
+  tabs.forEach(btn => btn.addEventListener('click', () => {
+    const estoqueBtn = document.getElementById('nav-estoque-btn');
+    if (btn.dataset.tab !== 'estoque') {
+      estoqueBtn?.classList.remove('active');
+      document.querySelectorAll('#estoque-submenu .nav-sub').forEach(el => el.classList.remove('active'));
+    }
+  }));
+});
 
 // ── Session timeout warning — avisa 2 min antes ──────────────────────
 (function() {

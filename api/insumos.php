@@ -14,6 +14,7 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/response.php';
 require_once __DIR__ . '/../admin/api/auth.php';
 require_once __DIR__ . '/../config/audit.php';
+require_once __DIR__ . '/../config/estoque_inteligente.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -50,6 +51,8 @@ try {
             ");
             $mStmt->execute([$id]);
             $insumo['movimentacoes'] = $mStmt->fetchAll();
+            $insumo['nivel_alerta']  = nivelAlerta($insumo);
+            $insumo['dias_cobertura'] = diasCobertura($insumo);
 
             jsonOk($insumo);
         }
@@ -65,7 +68,13 @@ try {
              WHERE i.ativo = true
              ORDER BY i.nome ASC
         ");
-        jsonOk($stmt->fetchAll());
+        $lista = $stmt->fetchAll();
+        foreach ($lista as &$row) {
+            $row['nivel_alerta']  = nivelAlerta($row);
+            $row['dias_cobertura'] = diasCobertura($row);
+        }
+        unset($row);
+        jsonOk($lista);
     }
 
     // ── Operações de escrita — exige admin ───────────────────────────────
@@ -75,21 +84,35 @@ try {
     if ($method === 'POST') {
         $body = jsonBody();
 
-        $nome            = trim($body['nome'] ?? '');
-        $unidade         = trim($body['unidade'] ?? 'UN');
-        $custo_medio     = (float)($body['custo_medio'] ?? 0);
-        $estoque_atual   = (float)($body['estoque_atual'] ?? 0);
-        $estoque_minimo  = (float)($body['estoque_minimo'] ?? 0);
+        $nome              = trim($body['nome']             ?? '');
+        $unidade           = trim($body['unidade']          ?? 'UN');
+        $custo_medio       = (float)($body['custo_medio']   ?? 0);
+        $estoque_atual     = (float)($body['estoque_atual'] ?? 0);
+        $estoque_minimo    = (float)($body['estoque_minimo'] ?? 0);
+        $codigo            = trim($body['codigo']            ?? '');
+        $fornecedor        = trim($body['fornecedor']        ?? '');
+        $categoria_insumo  = trim($body['categoria_insumo'] ?? 'alimento');
+        $armazenamento     = trim($body['armazenamento']     ?? 'ambiente');
+        $validade_dias     = isset($body['validade_dias']) && $body['validade_dias'] !== '' ? (int)$body['validade_dias'] : null;
+        $estoque_maximo    = isset($body['estoque_maximo'])  && $body['estoque_maximo'] !== '' ? (float)$body['estoque_maximo'] : null;
+        $alergenos         = trim($body['alergenos']         ?? '');
+        $observacoes       = trim($body['observacoes']       ?? '');
 
         assert400($nome !== '', 'O campo nome é obrigatório.');
         assert400(in_array($unidade, ['UN','KG','L','G','ML']), 'Unidade inválida. Use: UN, KG, L, G, ML.');
+        assert400(in_array($armazenamento, ['ambiente','refrigerado','congelado','seco']), 'Condição de armazenamento inválida.');
 
         $stmt = $db->prepare("
-            INSERT INTO totem_insumos (nome, unidade, custo_medio, estoque_atual, estoque_minimo)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO totem_insumos
+                (nome, unidade, custo_medio, estoque_atual, estoque_minimo,
+                 codigo, fornecedor, categoria_insumo, armazenamento,
+                 validade_dias, estoque_maximo, alergenos, observacoes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
         ");
-        $stmt->execute([$nome, $unidade, $custo_medio, $estoque_atual, $estoque_minimo]);
+        $stmt->execute([$nome, $unidade, $custo_medio, $estoque_atual, $estoque_minimo,
+                        $codigo, $fornecedor, $categoria_insumo, $armazenamento,
+                        $validade_dias, $estoque_maximo, $alergenos, $observacoes]);
         $newId = $stmt->fetchColumn();
 
         // Registrar entrada inicial se houver estoque
@@ -110,17 +133,28 @@ try {
     if ($method === 'PUT') {
         $body = jsonBody();
 
-        $id             = (int)($body['id'] ?? 0);
-        $nome           = trim($body['nome'] ?? '');
-        $unidade        = trim($body['unidade'] ?? 'UN');
-        $custo_medio    = (float)($body['custo_medio'] ?? 0);
-        $estoque_minimo = (float)($body['estoque_minimo'] ?? 0);
+        $id                = (int)($body['id'] ?? 0);
+        $nome              = trim($body['nome']             ?? '');
+        $unidade           = trim($body['unidade']          ?? 'UN');
+        $custo_medio       = (float)($body['custo_medio']   ?? 0);
+        $estoque_minimo    = (float)($body['estoque_minimo'] ?? 0);
+        $codigo            = trim($body['codigo']            ?? '');
+        $fornecedor        = trim($body['fornecedor']        ?? '');
+        $categoria_insumo  = trim($body['categoria_insumo'] ?? 'alimento');
+        $armazenamento     = trim($body['armazenamento']     ?? 'ambiente');
+        $validade_dias     = isset($body['validade_dias'])    && $body['validade_dias']    !== '' ? (int)$body['validade_dias']    : null;
+        $estoque_maximo    = isset($body['estoque_maximo'])   && $body['estoque_maximo']   !== '' ? (float)$body['estoque_maximo']  : null;
+        $alergenos         = trim($body['alergenos']          ?? '');
+        $observacoes       = trim($body['observacoes']        ?? '');
+        $lead_time_days    = isset($body['lead_time_days'])   && $body['lead_time_days']   !== '' ? max(1,(int)$body['lead_time_days'])   : null;
+        $custo_por_pedido  = isset($body['custo_por_pedido']) && $body['custo_por_pedido'] !== '' ? max(0,(float)$body['custo_por_pedido']) : null;
+        $dias_estoque_alvo = isset($body['dias_estoque_alvo'])&& $body['dias_estoque_alvo']!== '' ? max(1,(int)$body['dias_estoque_alvo']) : null;
 
         assert400($id > 0, 'ID inválido.');
         assert400($nome !== '', 'O campo nome é obrigatório.');
         assert400(in_array($unidade, ['UN','KG','L','G','ML']), 'Unidade inválida.');
+        assert400(in_array($armazenamento, ['ambiente','refrigerado','congelado','seco']), 'Condição de armazenamento inválida.');
 
-        // Buscar dados anteriores para auditoria
         $before = $db->prepare("SELECT * FROM totem_insumos WHERE id = ?");
         $before->execute([$id]);
         $antes = $before->fetch();
@@ -128,13 +162,61 @@ try {
 
         $stmt = $db->prepare("
             UPDATE totem_insumos
-               SET nome = ?, unidade = ?, custo_medio = ?, estoque_minimo = ?, atualizado_em = NOW()
+               SET nome              = ?,
+                   unidade           = ?,
+                   custo_medio       = ?,
+                   estoque_minimo    = ?,
+                   codigo            = ?,
+                   fornecedor        = ?,
+                   categoria_insumo  = ?,
+                   armazenamento     = ?,
+                   validade_dias     = ?,
+                   estoque_maximo    = ?,
+                   alergenos         = ?,
+                   observacoes       = ?,
+                   lead_time_days    = COALESCE(?, lead_time_days),
+                   custo_por_pedido  = COALESCE(?, custo_por_pedido),
+                   dias_estoque_alvo = COALESCE(?, dias_estoque_alvo),
+                   atualizado_em     = NOW()
              WHERE id = ?
         ");
-        $stmt->execute([$nome, $unidade, $custo_medio, $estoque_minimo, $id]);
+        $stmt->execute([
+            $nome, $unidade, $custo_medio, $estoque_minimo,
+            $codigo, $fornecedor, $categoria_insumo, $armazenamento,
+            $validade_dias, $estoque_maximo, $alergenos, $observacoes,
+            $lead_time_days, $custo_por_pedido, $dias_estoque_alvo,
+            $id,
+        ]);
 
-        auditLog($db, 'editar', 'estoque_insumos', $id, "Insumo editado: {$nome}", $antes, compact('nome','unidade','custo_medio','estoque_minimo'));
-        jsonOk(['id' => $id]);
+        $novos = compact('nome','unidade','custo_medio','estoque_minimo','codigo','fornecedor',
+                         'categoria_insumo','armazenamento','validade_dias','estoque_maximo');
+        auditLog($db, 'editar', 'estoque_insumos', $id, "Insumo editado: {$nome}", $antes, $novos);
+
+        // Alerta de custo de prato se custo_medio mudou
+        $alertas_pratos = [];
+        if (abs((float)$antes['custo_medio'] - $custo_medio) > 0.0001) {
+            $stmt = $db->prepare("
+                SELECT p.id, p.nome AS prato_nome, p.preco,
+                       SUM(ft.quantidade * ?) AS custo_insumo_novo,
+                       SUM(ft.quantidade * ?) AS custo_insumo_ant
+                  FROM totem_ficha_tecnica ft
+                  JOIN totem_produtos p ON p.id = ft.produto_id
+                 WHERE ft.insumo_id = ?
+                 GROUP BY p.id, p.nome, p.preco
+            ");
+            $stmt->execute([$custo_medio, (float)$antes['custo_medio'], $id]);
+            foreach ($stmt->fetchAll() as $prato) {
+                $delta = (float)$prato['custo_insumo_novo'] - (float)$prato['custo_insumo_ant'];
+                $alertas_pratos[] = [
+                    'produto_id'   => (int)$prato['id'],
+                    'prato_nome'   => $prato['prato_nome'],
+                    'preco_venda'  => (float)$prato['preco'],
+                    'variacao_custo' => round($delta, 4),
+                ];
+            }
+        }
+
+        jsonOk(['id' => $id, 'alertas_pratos' => $alertas_pratos]);
     }
 
     // ── DELETE — soft delete ──────────────────────────────────────────────
