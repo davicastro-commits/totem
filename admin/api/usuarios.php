@@ -13,16 +13,60 @@ try {
     $db = getDB();
 
     if ($method === 'GET') {
-        $stmt = $db->query("
-            SELECT u.id, u.nome, u.email, u.role, u.ativo, u.ultimo_login, u.criado_em,
-                   (SELECT COUNT(*) FROM totem_sessoes s WHERE s.admin_id = u.id) AS total_logins
-              FROM totem_admin u
-             ORDER BY u.criado_em DESC
-        ");
-        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+        // Tenta incluir a coluna permissoes (pode não existir se migration não foi aplicada)
+        try {
+            $stmt = $db->query("
+                SELECT u.id, u.nome, u.email, u.role, u.ativo, u.ultimo_login, u.criado_em,
+                       COALESCE(u.permissoes::text, '{}') AS permissoes_raw,
+                       (SELECT COUNT(*) FROM totem_sessoes s WHERE s.admin_id = u.id) AS total_logins
+                  FROM totem_admin u
+                 ORDER BY u.criado_em DESC
+            ");
+        } catch (PDOException $e) {
+            // Coluna permissoes ainda não existe — fallback sem ela
+            $stmt = $db->query("
+                SELECT u.id, u.nome, u.email, u.role, u.ativo, u.ultimo_login, u.criado_em,
+                       '{}' AS permissoes_raw,
+                       (SELECT COUNT(*) FROM totem_sessoes s WHERE s.admin_id = u.id) AS total_logins
+                  FROM totem_admin u
+                 ORDER BY u.criado_em DESC
+            ");
+        }
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$r) {
+            $r['permissoes'] = json_decode($r['permissoes_raw'] ?? '{}', true) ?: (object)[];
+            unset($r['permissoes_raw']);
+        }
+        echo json_encode(['success' => true, 'data' => $rows]);
 
     } elseif ($method === 'POST') {
         $body  = json_decode(file_get_contents('php://input'), true);
+
+        // Salvar permissões granulares (ação dedicada)
+        if (($body['action'] ?? '') === 'salvar_permissoes') {
+            $id   = (int)($body['id'] ?? 0);
+            $perm = $body['permissoes'] ?? [];
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'ID de usuário inválido']);
+                exit;
+            }
+            // Admins sempre têm acesso total — não salvar restrições sobre eles
+            $chk = $db->prepare("SELECT role FROM totem_admin WHERE id = ?");
+            $chk->execute([$id]);
+            $targetRole = $chk->fetchColumn();
+            if ($targetRole === 'admin') {
+                echo json_encode(['success' => true, 'msg' => 'Admin tem acesso total, nenhuma restrição aplicada']);
+                exit;
+            }
+            $permJson = json_encode($perm, JSON_UNESCAPED_UNICODE);
+            $stmt = $db->prepare("UPDATE totem_admin SET permissoes = ?::jsonb WHERE id = ?");
+            $stmt->execute([$permJson, $id]);
+            auditLog($db, 'permissoes_editadas', 'usuarios', $id, "Permissões do usuário #{$id} atualizadas");
+            echo json_encode(['success' => true]);
+            exit;
+        }
+
         $id    = isset($body['id']) ? (int)$body['id'] : null;
         $nome  = trim($body['nome']  ?? '');
         $email = trim($body['email'] ?? '');

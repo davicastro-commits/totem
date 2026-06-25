@@ -203,6 +203,18 @@ try {
         null, ['numero' => $numero, 'total' => $total, 'pagamento' => $pagamento]
     );
 
+    // ── Hook NFC-e: criar registro ao criar o pedido ──────────────────────
+    try {
+        $nfceStatus = ($statusInicial === 'aguardando_pagamento') ? 'pendente' : 'transmitindo';
+        $numStmt = $db->query("SELECT COALESCE(valor,'0') FROM totem_configuracoes WHERE chave='nfce_numero_atual'");
+        $numAtual = (int)($numStmt->fetchColumn() ?: 0) + 1;
+        $db->prepare("INSERT INTO totem_configuracoes (chave,valor) VALUES ('nfce_numero_atual',?) ON CONFLICT (chave) DO UPDATE SET valor=EXCLUDED.valor")->execute([$numAtual]);
+        $serie = $db->query("SELECT COALESCE(valor,'001') FROM totem_configuracoes WHERE chave='nfce_serie'")->fetchColumn() ?: '001';
+        $amb   = $db->query("SELECT COALESCE(valor,'homologacao') FROM totem_configuracoes WHERE chave='nfce_ambiente'")->fetchColumn() ?: 'homologacao';
+        $db->prepare("INSERT INTO totem_nfce (pedido_id,numero,serie,status,total,forma_pagamento,ambiente) VALUES (?,?,?,?,?,?,?)")
+           ->execute([$pedidoId,$numAtual,$serie,$nfceStatus,$total,$pagamento,$amb]);
+    } catch (Throwable) {} // Não bloquear o pedido se houver erro fiscal
+
     $cpfFmt = $cpf
         ? preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $cpf)
         : null;

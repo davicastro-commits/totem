@@ -174,6 +174,42 @@ try {
             ]);
         } catch (Throwable) {}
 
+        // ── Hook NFC-e: sincronizar status da nota com o pedido ───────────
+        try {
+            $nfceRow = $db->prepare("SELECT id, status FROM totem_nfce WHERE pedido_id=?");
+            $nfceRow->execute([$id]);
+            $nfce = $nfceRow->fetch();
+            $nfceStatus = match($status) {
+                'cancelado'  => 'cancelada',
+                'entregue'   => 'autorizada',
+                'pronto'     => 'autorizada',
+                'preparando' => 'transmitindo',
+                'aguardando' => 'transmitindo',
+                default      => null,
+            };
+            if ($nfce && $nfceStatus) {
+                if ($nfceStatus === 'autorizada') {
+                    $db->prepare("UPDATE totem_nfce SET status=?, autorizado_em=COALESCE(autorizado_em,NOW()) WHERE id=?")->execute([$nfceStatus,$nfce['id']]);
+                } elseif ($nfceStatus === 'cancelada') {
+                    $db->prepare("UPDATE totem_nfce SET status=?, cancelado_em=NOW() WHERE id=?")->execute([$nfceStatus,$nfce['id']]);
+                } else {
+                    $db->prepare("UPDATE totem_nfce SET status=? WHERE id=?")->execute([$nfceStatus,$nfce['id']]);
+                }
+            } elseif (!$nfce && $nfceStatus) {
+                // Criar NFC-e se ainda não existe
+                $numStmt = $db->query("SELECT COALESCE(valor,'0') FROM totem_configuracoes WHERE chave='nfce_numero_atual'");
+                $numAtual = (int)($numStmt->fetchColumn() ?: 0) + 1;
+                $db->prepare("INSERT INTO totem_configuracoes (chave,valor) VALUES ('nfce_numero_atual',?) ON CONFLICT (chave) DO UPDATE SET valor=EXCLUDED.valor")->execute([$numAtual]);
+                $serieStmt = $db->query("SELECT COALESCE(valor,'001') FROM totem_configuracoes WHERE chave='nfce_serie'");
+                $serie = $serieStmt->fetchColumn() ?: '001';
+                $ambStmt = $db->query("SELECT COALESCE(valor,'homologacao') FROM totem_configuracoes WHERE chave='nfce_ambiente'");
+                $amb = $ambStmt->fetchColumn() ?: 'homologacao';
+                $authEm = in_array($nfceStatus, ['autorizada']) ? date('Y-m-d H:i:s') : null;
+                $db->prepare("INSERT INTO totem_nfce (pedido_id,numero,serie,status,total,forma_pagamento,ambiente,autorizado_em) VALUES (?,?,?,?,?,?,?,?)")
+                   ->execute([$id,$numAtual,$serie,$nfceStatus,$ped['total'],$ped['forma_pagamento'],$amb,$authEm]);
+            }
+        } catch (Throwable) {} // Não bloquear o pedido se houver erro fiscal
+
         echo json_encode(['success' => true]);
 
     } else {
