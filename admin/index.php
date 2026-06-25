@@ -2590,35 +2590,43 @@ function canSeeAny(string ...$keys): bool
       display: block
     }
 
-    /* ── Permissões — layout hierárquico ─────────────────────────────────────── */
-    /* Grupo (ex: Painel Administrativo) */
+    /* ── Permissões — layout acordeão ─────────────────────────────────────── */
     .perm-group {
-      margin-bottom: 20px
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      background: var(--card)
     }
 
     .perm-group-hdr {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 0;
-      border-bottom: 2px solid var(--ps-c, var(--acc));
-      margin-bottom: 10px
+      padding: 14px 16px;
+      cursor: pointer;
+      user-select: none;
+      transition: background .15s;
+      background: var(--card)
+    }
+
+    .perm-group-hdr:hover {
+      background: var(--card2)
     }
 
     .perm-group-ico {
-      font-size: 18px;
-      width: 28px;
+      font-size: 17px;
+      width: 26px;
       text-align: center;
       flex-shrink: 0
     }
 
     .perm-group-name {
-      font-size: 11.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .6px;
+      flex: 1;
+      font-size: 13.5px;
+      font-weight: 600;
       color: var(--text);
-      flex: 1
+      letter-spacing: .1px
     }
 
     .perm-grp-count {
@@ -2637,47 +2645,70 @@ function canSeeAny(string ...$keys): bool
       color: var(--green)
     }
 
+    .perm-acc-chevron {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text3);
+      flex-shrink: 0;
+      transition: transform .22s ease
+    }
+
+    .perm-acc-chevron svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round
+    }
+
+    .perm-group.open > .perm-group-hdr .perm-acc-chevron {
+      transform: rotate(180deg)
+    }
+
+    .perm-acc-body {
+      display: none;
+      flex-direction: column;
+      border-top: 1px solid var(--border)
+    }
+
+    .perm-group.open > .perm-acc-body {
+      display: flex
+    }
+
     .perm-grp-note {
       font-size: 11px;
       color: var(--text3);
-      margin-bottom: 8px;
-      padding: 7px 10px;
+      padding: 8px 16px;
       background: var(--card2);
-      border-radius: 6px;
-      border-left: 2px solid var(--ps-c, var(--acc))
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid var(--ps-c, var(--acc))
     }
 
-    /* Grid de cards de página */
-    .perm-cards-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-      gap: 8px
-    }
-
-    /* Card de uma página/item */
+    /* Item (página) como linha */
     .perm-page-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      transition: border-color .2s, box-shadow .2s;
       display: flex;
-      flex-direction: column
+      flex-direction: column;
+      border-bottom: 1px solid var(--border)
     }
 
-    .perm-page-card.on {
-      border-color: var(--ps-c, var(--acc));
-      box-shadow: 0 0 0 1px var(--ps-c, var(--acc))22
+    .perm-page-card:last-child {
+      border-bottom: none
     }
 
     .perm-page-hdr {
       display: flex;
       align-items: center;
-      gap: 9px;
-      padding: 11px 13px;
-      cursor: pointer;
+      gap: 10px;
+      padding: 13px 16px;
+      cursor: default;
       user-select: none;
-      min-height: 48px
+      transition: background .12s;
+      min-height: 50px
     }
 
     .perm-page-hdr:hover {
@@ -2685,29 +2716,30 @@ function canSeeAny(string ...$keys): bool
     }
 
     .perm-page-ico {
-      font-size: 15px;
-      width: 24px;
+      font-size: 14px;
+      width: 22px;
       text-align: center;
       flex-shrink: 0
     }
 
     .perm-page-label {
       flex: 1;
-      font-size: 12.5px;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 500;
       color: var(--text3);
       line-height: 1.3
     }
 
     .perm-page-card.on .perm-page-label {
-      color: var(--text)
+      color: var(--ps-c, var(--acc));
+      font-weight: 600
     }
 
-    /* Sub-ações dentro do card */
+    /* Sub-ações */
     .perm-page-actions {
-      border-top: 1px solid var(--border);
       display: none;
-      flex-direction: column
+      flex-direction: column;
+      background: var(--card2)
     }
 
     .perm-page-card.on .perm-page-actions {
@@ -2718,13 +2750,14 @@ function canSeeAny(string ...$keys): bool
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 13px;
+      padding: 9px 16px 9px 52px;
       transition: background .1s;
-      gap: 8px
+      gap: 8px;
+      border-top: 1px solid var(--border)
     }
 
     .perm-action-row:hover {
-      background: var(--card2)
+      background: var(--card)
     }
 
     .perm-action-row.disabled {
@@ -2733,7 +2766,7 @@ function canSeeAny(string ...$keys): bool
     }
 
     .perm-action-label {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text2);
       flex: 1
     }
@@ -3870,16 +3903,17 @@ function canSeeAny(string ...$keys): bool
                   $gbg = $grp['bg'];
                 ?>
                   <div class="perm-group" data-grp="<?= $gk ?>" style="--ps-c:<?= $gc ?>;--ps-bg:<?= $gbg ?>">
-                    <div class="perm-group-hdr">
+                    <div class="perm-group-hdr" onclick="togglePermAccordion(this.closest('.perm-group'))">
                       <span class="perm-group-ico"><?= $grp['ico'] ?></span>
                       <span class="perm-group-name"><?= $grp['label'] ?></span>
                       <span class="perm-grp-count">0/0</span>
-                      <button class="btn btn-sm" style="margin-left:8px;background:var(--ps-bg);color:var(--ps-c);border:1px solid var(--ps-c)" onclick="togglePermGroup('<?= $gk ?>',true)">Marcar todos</button>
+                      <button class="btn btn-sm" style="margin-left:4px;background:var(--ps-bg);color:var(--ps-c);border:1px solid var(--ps-c);font-size:11px" onclick="event.stopPropagation();togglePermGroup('<?= $gk ?>',true)">Todos</button>
+                      <span class="perm-acc-chevron"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
                     </div>
-                    <?php if (!empty($grp['note'])): ?>
-                      <div class="perm-grp-note">ℹ️ <?= $grp['note'] ?></div>
-                    <?php endif; ?>
-                    <div class="perm-cards-grid">
+                    <div class="perm-acc-body">
+                      <?php if (!empty($grp['note'])): ?>
+                        <div class="perm-grp-note">ℹ️ <?= $grp['note'] ?></div>
+                      <?php endif; ?>
                       <?php foreach ($grp['pages'] as $pg):
                         $pk = $pg['k'];
                         $pl = $pg['l'];
@@ -7685,6 +7719,11 @@ function canSeeAny(string ...$keys): bool
         if (!on) row.querySelector('.perm-action-inp').checked = false;
       });
       atualizarContagens();
+    }
+
+    // Abrir/fechar seção de acordeão
+    function togglePermAccordion(section) {
+      section.classList.toggle('open');
     }
 
     // Marcar/desmarcar todos os itens de um grupo
